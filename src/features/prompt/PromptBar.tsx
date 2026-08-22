@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { isLiveBackend } from '../../transport'
-import { useRunStore } from '../../stores/runStore'
+import { activeTurn, useRunStore } from '../../stores/runStore'
 
 const EXAMPLES = [
   '2024년 전기차 시장 규모와 성장률을 조사해서 리포트로 정리해줘',
@@ -11,8 +11,8 @@ const EXAMPLES = [
 export function PromptBar() {
   const submit = useRunStore((s) => s.submit)
   const submitting = useRunStore((s) => s.submitting)
-  const conn = useRunStore((s) => s.conn)
-  const hasRun = useRunStore((s) => Boolean(s.runId))
+  const conn = useRunStore((s) => activeTurn(s)?.conn ?? 'idle')
+  const turnCount = useRunStore((s) => s.turns.length)
 
   const [text, setText] = useState('')
   const areaRef = useRef<HTMLTextAreaElement>(null)
@@ -65,7 +65,7 @@ export function PromptBar() {
   return (
     <form className="prompt" onSubmit={onSubmit}>
       <div className="prompt__inner">
-        {!hasRun && (
+        {turnCount === 0 && (
           <div className="prompt__examples">
             <span className="prompt__examples-label">예시</span>
             {EXAMPLES.map((example) => (
@@ -87,7 +87,11 @@ export function PromptBar() {
             className="prompt__input"
             rows={2}
             value={text}
-            placeholder="에이전트에게 무엇을 요청할까요?"
+            placeholder={
+              turnCount === 0
+                ? '에이전트에게 무엇을 요청할까요?'
+                : '이어서 물어보세요 — 앞 대화의 맥락이 유지됩니다'
+            }
             onChange={(e) => {
               setText(e.target.value)
               resize(e.target)

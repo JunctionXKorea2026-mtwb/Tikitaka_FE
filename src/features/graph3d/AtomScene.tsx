@@ -3,7 +3,7 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useRunState, useRunStore } from '../../stores/runStore'
+import { activeTurn, useRunState, useRunStore } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 import {
   buildAtom,
@@ -34,6 +34,10 @@ import {
 
 /** px → three 월드 단위 */
 const SCALE = 0.01
+/** 대화의 이웃 턴이 놓이는 간격 */
+const NEIGHBOR_GAP = 5.4
+/** 이웃 턴의 축소 비율 — 활성 턴이 확실히 주인공이어야 한다 */
+const NEIGHBOR_SCALE = 0.34
 
 /** 푸른 계열 팔레트. error만 계열 밖에 둔다 — 실패가 파랗게 묻히면 안 된다. */
 const COLOR: Record<string, string> = {
@@ -51,9 +55,14 @@ const LATTICE = '#2f7fd0'
 
 export function AtomScene() {
   const run = useRunState()
-  const question = useRunStore((s) => s.prompt || s.title)
+  const question = useRunStore((s) => activeTurn(s)?.prompt ?? '')
+  const turns = useRunStore((s) => s.turns)
+  const activeId = useRunStore((s) => s.activeId)
+  const selectTurn = useRunStore((s) => s.selectTurn)
   const atom = useMemo(() => buildAtom(run, question), [run, question])
   const [spin, setSpin] = useState(true)
+
+  const activeIndex = turns.findIndex((t) => t.id === activeId)
 
   // 바깥 껍질이 화면을 채우도록
   const distance = atom.extent * SCALE * 2.05
@@ -72,6 +81,17 @@ export function AtomScene() {
 
         <Starfield />
         <Atom atom={atom} />
+
+        {/* 대화의 다른 턴들 — 작고 어둡게 옆에 선다. 대화가 곧 분자가 된다. */}
+        {turns.map((turn, i) =>
+          turn.id === activeId ? null : (
+            <NeighborAtom
+              key={turn.id}
+              offset={(i - activeIndex) * NEIGHBOR_GAP}
+              onSelect={() => selectTurn(turn.id)}
+            />
+          ),
+        )}
 
         <OrbitControls
           enablePan={false}
@@ -145,6 +165,34 @@ function Atom({ atom }: { atom: AtomModel }) {
         selected={selectedId === atom.rootId}
         onSelect={() => select(atom.rootId)}
       />
+    </group>
+  )
+}
+
+/**
+ * 대화의 다른 턴. 내용은 생략하고 껍질 실루엣만 남긴다 —
+ * "저기 또 하나의 질문이 있다"만 전하면 충분하고, 자세히 보려면 클릭해서 옮겨간다.
+ */
+function NeighborAtom({ offset, onSelect }: { offset: number; onSelect: () => void }) {
+  return (
+    <group
+      position={[offset, 0, 0]}
+      scale={NEIGHBOR_SCALE}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect()
+      }}
+    >
+      <Lattice shell={{ radius: 330, detail: 2 }} opacity={0.16} />
+      <mesh>
+        <sphereGeometry args={[0.5, 24, 18]} />
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive="#3f9dff"
+          emissiveIntensity={2.4}
+          toneMapped={false}
+        />
+      </mesh>
     </group>
   )
 }

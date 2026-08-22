@@ -1,114 +1,143 @@
-import { rootAgent, runTotals, type AgentState, type RunState } from '../../entities/run'
-import { useRunState, useRunStore } from '../../stores/runStore'
+import { rootAgent, runTotals, type RunState } from '../../entities/run'
+import { runStateOf, useRunStore, type Turn } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 
 /**
- * 요청 ↔ 최종 답변을 짝지어 보여주는 뷰.
+ * 대화 뷰 — 턴이 쌓인다.
  *
- * 파이프라인의 답변은 루트 에이전트(부모 없는 에이전트)의 result다.
- * 파생 상태라 타임라인을 되감으면 자동으로 "진행 중"으로 돌아간다 — 별도 처리가 없다.
+ * 후속 질문은 이전 턴을 지우지 않는다. 각 턴은 요청↔답변 한 쌍이고,
+ * 클릭하면 캔버스(2D·3D 모두)가 그 턴으로 옮겨간다.
  *
- * 우측 패널(좁게)과 확대 오버레이(넓게)가 이 컴포넌트를 공유한다.
+ * 활성 턴만 펼쳐 보여주고 나머지는 접는다 — 안 그러면 패널이 답변으로 가득 찬다.
  */
 export function ResultView({ expanded = false }: { expanded?: boolean }) {
-  const run = useRunState()
-  const prompt = useRunStore((s) => s.prompt)
-  const title = useRunStore((s) => s.title)
-  const conn = useRunStore((s) => s.conn)
+  const turns = useRunStore((s) => s.turns)
+  const activeId = useRunStore((s) => s.activeId)
+  const selectTurn = useRunStore((s) => s.selectTurn)
   const submitting = useRunStore((s) => s.submitting)
-  const select = useViewStore((s) => s.select)
   const setResultExpanded = useViewStore((s) => s.setResultExpanded)
 
-  const root = rootAgent(run)
-  const done = root?.status === 'done' || root?.status === 'error'
-  const totals = runTotals(run)
+  if (turns.length === 0) {
+    return (
+      <div className="result">
+        <p className="result__idle">
+          {submitting ? '실행을 시작하는 중…' : '아래 입력창에 요청을 입력하세요.'}
+        </p>
+      </div>
+    )
+  }
+
+  // 확대 보기에서는 활성 턴 하나만 크게
+  const list = expanded ? turns.filter((t) => t.id === activeId) : turns
 
   return (
     <div className={`result${expanded ? ' result--expanded' : ''}`}>
-      <section className="result__request">
-        <h3>요청</h3>
-        <p>{prompt || title || '아래 입력창에 요청을 입력하세요.'}</p>
-      </section>
-
-      {done && root ? (
-        <Answer agent={root} expanded={expanded} onInspect={() => select(root.id)} />
-      ) : (
-        <Progress run={run} conn={conn} submitting={submitting} />
-      )}
-
-      {totals.agents > 0 && (
-        <dl className="result__stats">
-          <Stat label="경과" value={`${totals.elapsed.toFixed(1)}s`} />
-          <Stat label="에이전트" value={String(totals.agents)} />
-          <Stat
-            label="도구 호출"
-            value={
-              totals.failedCalls > 0
-                ? `${totals.toolCalls} (실패 ${totals.failedCalls})`
-                : String(totals.toolCalls)
-            }
-            warn={totals.failedCalls > 0}
-          />
-          <Stat label="토큰" value={totals.tokens > 0 ? totals.tokens.toLocaleString() : '—'} />
-        </dl>
-      )}
-
-      {!expanded && done && (
-        <button className="result__expand" onClick={() => setResultExpanded(true)}>
-          크게 보기 ⤢
-        </button>
-      )}
+      {list.map((turn, i) => (
+        <TurnCard
+          key={turn.id}
+          turn={turn}
+          index={expanded ? turns.findIndex((t) => t.id === turn.id) : i}
+          active={turn.id === activeId}
+          expanded={expanded}
+          onSelect={() => selectTurn(turn.id)}
+          onExpand={() => setResultExpanded(true)}
+        />
+      ))}
     </div>
   )
 }
 
-function Answer({
-  agent,
+function TurnCard({
+  turn,
+  index,
+  active,
   expanded,
-  onInspect,
+  onSelect,
+  onExpand,
 }: {
-  agent: AgentState
+  turn: Turn
+  index: number
+  active: boolean
   expanded: boolean
-  onInspect: () => void
+  onSelect: () => void
+  onExpand: () => void
 }) {
-  const failed = agent.status === 'error'
+  const run = runStateOf(turn)
+  const root = rootAgent(run)
+  const done = root?.status === 'done' || root?.status === 'error'
+  const failed = root?.status === 'error'
 
   return (
-    <section className={`answer${failed ? ' answer--error' : ''}`}>
-      <header className="answer__head">
-        <span className="answer__badge">{failed ? '부분 실패' : '완료'}</span>
-        <h3>답변</h3>
-        <button
-          className="answer__copy"
-          onClick={() => void navigator.clipboard.writeText(agent.result ?? '')}
-        >
-          복사
-        </button>
-      </header>
-
-      <p className={`answer__text${expanded ? ' answer__text--lg' : ''}`}>
-        {agent.result ?? '결과 없음'}
-      </p>
-
-      <button className="answer__inspect" onClick={onInspect}>
-        {agent.label} 실행 상세 →
+    <section className={`turn${active ? ' is-active' : ''}`}>
+      <button className="turn__ask" onClick={onSelect}>
+        <span className="turn__index">{index + 1}</span>
+        <span className="turn__prompt">{turn.prompt}</span>
       </button>
+
+      {/* 접힌 턴은 한 줄 요약만. 펼치면 패널이 답변으로 가득 찬다. */}
+      {!active && !expanded ? (
+        <p className="turn__folded" onClick={onSelect}>
+          {done ? summarize(root?.result) : '진행 중…'}
+        </p>
+      ) : (
+        <>
+          {done && root ? (
+            <div className={`answer${failed ? ' answer--error' : ''}`}>
+              <header className="answer__head">
+                <span className="answer__badge">{failed ? '부분 실패' : '완료'}</span>
+                <h3>답변</h3>
+                <button
+                  className="answer__copy"
+                  onClick={() => void navigator.clipboard.writeText(root.result ?? '')}
+                >
+                  복사
+                </button>
+              </header>
+              <p className={`answer__text${expanded ? ' answer__text--lg' : ''}`}>
+                {root.result ?? '결과 없음'}
+              </p>
+            </div>
+          ) : (
+            <Progress run={run} conn={turn.conn} />
+          )}
+
+          <Stats run={run} />
+
+          {!expanded && done && (
+            <button className="result__expand" onClick={onExpand}>
+              크게 보기 ⤢
+            </button>
+          )}
+        </>
+      )}
     </section>
   )
 }
 
-function Progress({
-  run,
-  conn,
-  submitting,
-}: {
-  run: RunState
-  conn: string
-  submitting: boolean
-}) {
-  if (submitting || conn === 'connecting') {
-    return <p className="result__idle">실행을 시작하는 중…</p>
-  }
+function Stats({ run }: { run: RunState }) {
+  const totals = runTotals(run)
+  if (totals.agents === 0) return null
+
+  return (
+    <dl className="result__stats">
+      <Stat label="경과" value={`${totals.elapsed.toFixed(1)}s`} />
+      <Stat label="에이전트" value={String(totals.agents)} />
+      <Stat
+        label="도구"
+        value={
+          totals.failedCalls > 0
+            ? `${totals.toolCalls} (실패 ${totals.failedCalls})`
+            : String(totals.toolCalls)
+        }
+        warn={totals.failedCalls > 0}
+      />
+      <Stat label="토큰" value={totals.tokens > 0 ? totals.tokens.toLocaleString() : '—'} />
+    </dl>
+  )
+}
+
+function Progress({ run, conn }: { run: RunState; conn: string }) {
+  if (conn === 'connecting') return <p className="result__idle">실행을 시작하는 중…</p>
   if (run.agentOrder.length === 0) {
     return <p className="result__idle">아직 실행된 에이전트가 없습니다.</p>
   }
@@ -148,4 +177,15 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
       <dd className={warn ? 'is-warn' : undefined}>{value}</dd>
     </div>
   )
+}
+
+/** 접힌 턴에 보여줄 한 줄. 목업 머리말은 떼고 본문 첫 줄만. */
+function summarize(result?: string): string {
+  if (!result) return '결과 없음'
+  const line = result
+    .split('\n')
+    .map((l) => l.trim())
+    .find((l) => l.length > 0 && !l.startsWith('[목업 응답]') && !l.startsWith('요청:'))
+  const text = line ?? result.split('\n')[0]
+  return text.length > 70 ? `${text.slice(0, 70)}…` : text
 }

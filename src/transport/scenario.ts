@@ -29,9 +29,13 @@ function topicWords(prompt: string): string[] {
 
 type Shape = 'simple' | 'research' | 'failure'
 
-function pickShape(prompt: string): Shape {
+/**
+ * 후속 질문은 대개 앞의 결과를 다듬는 일이라 파이프라인이 짧다.
+ * 이미 모은 자료가 있으니 Researcher를 다시 돌릴 이유가 없다.
+ */
+function pickShape(prompt: string, followUp: boolean): Shape {
   if (/실패|에러|장애|오류|error|fail|timeout/i.test(prompt)) return 'failure'
-  if (prompt.trim().length < 16) return 'simple'
+  if (followUp || prompt.trim().length < 16) return 'simple'
   return 'research'
 }
 
@@ -49,7 +53,7 @@ function answerText(prompt: string, steps: string[]): string {
   ].join('\n')
 }
 
-export function buildScenario(runId: string, prompt: string): RunFixture {
+export function buildScenario(runId: string, prompt: string, followUp = false): RunFixture {
   const words = topicWords(prompt)
   const topic = words.slice(0, 3).join(' ') || '요청'
   const query = words.slice(0, 4).join(' ') || prompt.slice(0, 20)
@@ -59,7 +63,7 @@ export function buildScenario(runId: string, prompt: string): RunFixture {
   /** dt초 뒤의 타임스탬프를 돌려주면서 시계를 진행시킨다. */
   const at = (dt: number) => (t = Number((t + dt).toFixed(1)))
 
-  const shape = pickShape(prompt)
+  const shape = pickShape(prompt, followUp)
   const title = prompt.length > 40 ? `${prompt.slice(0, 40)}…` : prompt
 
   events.push({
@@ -73,7 +77,7 @@ export function buildScenario(runId: string, prompt: string): RunFixture {
   if (shape === 'failure') {
     buildFailure(events, at, topic, prompt)
   } else if (shape === 'simple') {
-    buildSimple(events, at, topic, query, prompt)
+    buildSimple(events, at, topic, query, prompt, followUp)
   } else {
     buildResearch(events, at, topic, query, prompt, words)
   }
@@ -351,18 +355,27 @@ function buildResearch(
 
 // ------------------------------------------------------------------ simple
 
-function buildSimple(ev: AgentEvent[], at: Clock, topic: string, query: string, prompt: string) {
+function buildSimple(
+  ev: AgentEvent[],
+  at: Clock,
+  topic: string,
+  query: string,
+  prompt: string,
+  followUp = false,
+) {
   ev.push({
     type: 'agent.thinking',
     ts: at(0.5),
     agentId: 'orchestrator',
-    summary: `"${topic}" — 단일 작업으로 처리 가능`,
+    summary: followUp
+      ? `후속 질문 — 앞 턴의 맥락을 이어 "${topic}" 처리`
+      : `"${topic}" — 단일 작업으로 처리 가능`,
   })
   ev.push({
     type: 'agent.started',
     ts: at(0.7),
     agentId: 'worker',
-    label: 'Worker',
+    label: followUp ? 'Refiner' : 'Worker',
     role: 'worker',
     parentId: 'orchestrator',
   })

@@ -1,10 +1,11 @@
 import { isLiveBackend } from '../../transport'
-import { useRunStore } from '../../stores/runStore'
+import { activeTurn, useRunStore } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 
 export function Toolbar() {
-  const runId = useRunStore((s) => s.runId)
-  const title = useRunStore((s) => s.title)
+  const turn = useRunStore(activeTurn)
+  const turnCount = useRunStore((s) => s.turns.length)
+  const reset = useRunStore((s) => s.reset)
   const speed = useRunStore((s) => s.speed)
   const replay = useRunStore((s) => s.replay)
   const setSpeed = useRunStore((s) => s.setSpeed)
@@ -15,7 +16,7 @@ export function Toolbar() {
   const dimension = useViewStore((s) => s.dimension)
   const toggleDimension = useViewStore((s) => s.toggleDimension)
 
-  const hasRun = Boolean(runId)
+  const hasRun = Boolean(turn)
 
   return (
     <header className="toolbar">
@@ -23,7 +24,7 @@ export function Toolbar() {
         <span className="toolbar__logo">◇</span>
         <div>
           <h1>Agent Flow</h1>
-          <p>{title || '요청을 입력하면 실행이 시작됩니다'}</p>
+          <p>{turn ? `${turnCount}개 턴 · ${turn.title || turn.prompt}` : '요청을 입력하면 실행이 시작됩니다'}</p>
         </div>
       </div>
 
@@ -67,6 +68,9 @@ export function Toolbar() {
         </button>
         <button onClick={resetPositions} disabled={!hasRun}>
           배치 초기화
+        </button>
+        <button onClick={reset} disabled={!hasRun}>
+          새 대화
         </button>
       </div>
     </header>

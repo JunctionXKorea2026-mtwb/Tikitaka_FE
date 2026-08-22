@@ -8,13 +8,13 @@ import { PromptBar } from './features/prompt/PromptBar'
 import { ResultOverlay } from './features/result/ResultOverlay'
 import { Toolbar } from './features/session/Toolbar'
 import { Timeline } from './features/timeline/Timeline'
-import { useRunStore } from './stores/runStore'
+import { activeTurn, useRunStore } from './stores/runStore'
 import { useViewStore } from './stores/viewStore'
 
 export default function App() {
   // 자동 실행하지 않는다. 사용자가 요청을 입력해야 시작한다.
   const disconnect = useRunStore((s) => s.disconnect)
-  const error = useRunStore((s) => s.error)
+  const error = useRunStore((s) => activeTurn(s)?.error)
   const dimension = useViewStore((s) => s.dimension)
 
   useEffect(() => disconnect, [disconnect])

@@ -1,9 +1,9 @@
-import { useRunState, useRunStore } from '../../stores/runStore'
+import { activeTurn, useRunState, useRunStore } from '../../stores/runStore'
 
 /** 아직 실행이 없을 때 캔버스 자리에 뜨는 안내. 입력창으로 시선을 보낸다. */
 export function CanvasEmpty() {
   const run = useRunState()
-  const conn = useRunStore((s) => s.conn)
+  const conn = useRunStore((s) => activeTurn(s)?.conn ?? 'idle')
   const submitting = useRunStore((s) => s.submitting)
 
   if (run.agentOrder.length > 0) return null

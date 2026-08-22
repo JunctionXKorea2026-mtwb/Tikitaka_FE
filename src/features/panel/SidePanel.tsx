@@ -7,7 +7,7 @@ import { ResultView } from '../result/ResultView'
 
 export function SidePanel() {
   const run = useRunState()
-  const runId = useRunStore((s) => s.runId)
+  const runId = useRunStore((s) => s.activeId ?? '')
   const tab = useViewStore((s) => s.panelTab)
   const setTab = useViewStore((s) => s.setTab)
 

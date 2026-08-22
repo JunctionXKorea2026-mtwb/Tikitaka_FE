@@ -1,19 +1,18 @@
-import { useRunStore, visibleCount } from '../../stores/runStore'
+import { activeTurn, useRunStore, visibleCount } from '../../stores/runStore'
 
 /**
- * 이벤트 인덱스를 스크럽하는 타임라인.
+ * 활성 턴 안에서 이벤트 인덱스를 스크럽한다.
  * 리듀서가 순수하므로 "과거로 되감기"가 slice 한 번으로 끝난다.
  */
 export function Timeline() {
-  const events = useRunStore((s) => s.events)
+  const turn = useRunStore(activeTurn)
   const cursor = useRunStore((s) => s.cursor)
-  const conn = useRunStore((s) => s.conn)
   const setCursor = useRunStore((s) => s.setCursor)
+  const current = useRunStore(visibleCount)
 
-  const total = events.length
-  const current = visibleCount({ events, cursor })
+  const total = turn?.events.length ?? 0
   const live = cursor === null
-  const at = events[current - 1]
+  const at = turn?.events[current - 1]
 
   return (
     <footer className="timeline">
@@ -43,7 +42,9 @@ export function Timeline() {
         <strong>{current}</strong>
         <span>/ {total} events</span>
         {at && <span className="timeline__ts">t={at.ts.toFixed(1)}s</span>}
-        <span className={`timeline__conn conn-${conn}`}>{conn}</span>
+        <span className={`timeline__conn conn-${turn?.conn ?? 'idle'}`}>
+          {turn?.conn ?? 'idle'}
+        </span>
       </div>
     </footer>
   )

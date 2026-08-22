@@ -16,23 +16,26 @@ const scenarios = new Map<string, RunFixture>()
 /**
  * 사용자 요청으로 새 실행을 만들고 runId를 받는다.
  *
- * 실제 백엔드: POST {API_URL}/runs  { prompt } → { runId }
+ * 실제 백엔드: POST {API_URL}/runs  { prompt, threadId, turn } → { runId }
+ *   threadId로 대화를 묶는다. turn > 0 이면 후속 질문이므로
+ *   백엔드는 같은 스레드의 이전 맥락을 이어서 처리하면 된다.
+ *
  * mock: 프롬프트에서 시나리오를 생성해 메모리에 보관한다.
  */
-export async function createRun(prompt: string): Promise<string> {
+export async function createRun(prompt: string, threadId: string, turn = 0): Promise<string> {
   if (API_URL) {
     const res = await fetch(`${API_URL}/runs`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, threadId, turn }),
     })
     if (!res.ok) throw new Error(`실행 생성 실패: ${res.status} ${res.statusText}`)
     const { runId } = (await res.json()) as { runId: string }
     return runId
   }
 
-  const runId = `mock-${Date.now().toString(36)}`
-  scenarios.set(runId, buildScenario(runId, prompt))
+  const runId = `mock-${Date.now().toString(36)}-${turn}`
+  scenarios.set(runId, buildScenario(runId, prompt, turn > 0))
   return runId
 }
 
