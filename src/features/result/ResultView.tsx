@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { rootAgent, runTotals, type RunState } from '../../entities/run'
-import { runStateOf, useRunStore, type Turn } from '../../stores/runStore'
+import { runStateOf, turnNumbers, useRunStore, type Turn } from '../../stores/runStore'
 import { isLiveBackend } from '../../transport'
 import { useViewStore } from '../../stores/viewStore'
 
@@ -23,6 +23,7 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   // 캔버스가 다른 대화로 튀지 않는다 — 화면이 흔들리는 게 제일 거슬리는 동작이라
   // "보러 가기"는 별도 버튼으로 뗐다.
   const [openIds, setOpenIds] = useState<string[]>(() => (activeId ? [activeId] : []))
+  const numbers = turnNumbers(turns)
   const toggle = (id: string) =>
     setOpenIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
 
@@ -45,12 +46,10 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
         <TurnCard
           key={turn.id}
           turn={turn}
-          index={expanded ? turns.findIndex((t) => t.id === turn.id) : i}
+          number={numbers.get(turn.id) ?? String(i + 1)}
           active={turn.id === activeId}
           expanded={expanded}
           open={expanded || openIds.includes(turn.id)}
-          // 뿌리(새 주제)는 앞에 구분선을 둔다. 첫 턴은 빼고.
-          newTopic={!expanded && turn.parentId === null && i > 0}
           onToggle={() => toggle(turn.id)}
           onSelect={() => selectTurn(turn.id)}
           onExpand={() => setResultExpanded(true)}
@@ -62,21 +61,20 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
 
 function TurnCard({
   turn,
-  index,
+  number,
   active,
   expanded,
   open,
-  newTopic = false,
   onToggle,
   onSelect,
   onExpand,
 }: {
   turn: Turn
-  index: number
+  /** 1, 2, 2-1 … 번호가 대화 구조를 말한다 */
+  number: string
   active: boolean
   expanded: boolean
   open: boolean
-  newTopic?: boolean
   onToggle: () => void
   onSelect: () => void
   onExpand: () => void
@@ -90,12 +88,10 @@ function TurnCard({
     <section
       className={`turn${active ? ' is-active' : ''}${turn.parentId ? ' turn--child' : ''}`}
     >
-      {newTopic && <div className="turn__divider">새 주제</div>}
-
       <div className="turn__row">
         <button className="turn__ask" onClick={onToggle} aria-expanded={open}>
           <span className="turn__caret">{open ? '▾' : '▸'}</span>
-          <span className="turn__index">{index + 1}</span>
+          <span className="turn__index">{number}</span>
           <span className="turn__prompt">{turn.prompt}</span>
         </button>
 

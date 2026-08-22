@@ -1,7 +1,7 @@
 import { Html, Line, OrbitControls } from '@react-three/drei'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { runStateOf, useRunStore, type Turn } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
@@ -50,6 +50,12 @@ const COLOR: Record<string, string> = {
 const colorOf = (status: string) => COLOR[status] ?? '#8ea6cc'
 /** 격자 자체의 색 — 노드보다 어두워야 노드가 읽힌다 */
 const LATTICE = '#2f7fd0'
+/**
+ * 다음 질문이 붙을 원자를 표시하는 색.
+ * 상태색(파랑 계열)과 겹치지 않게 호박색을 쓴다 — 상태가 아니라 "지금 겨냥한 곳"이라
+ * 계열을 벗어나야 한눈에 구분된다.
+ */
+const TARGET = '#ffb347'
 
 export function AtomScene() {
   const turns = useRunStore((s) => s.turns)
@@ -60,6 +66,18 @@ export function AtomScene() {
   // 어느 턴이 패널·타임라인과 묶여 있는지만 밝기로 표시한다.
   const molecule = useMemo(() => buildMolecule(turns), [turns])
   const [spin, setSpin] = useState(true)
+  const [dragging, setDragging] = useState<string | null>(null)
+  // 원자를 끈 직후의 클릭이 선택으로 새지 않게 막는다
+  const dragGuard = useRef(false)
+
+  const atomPositions = useViewStore((s) => s.atomPositions)
+  const composeMode = useViewStore((s) => s.composeMode)
+  // 이어서 물으면 지금 보고 있는 턴에 붙는다. 그 원자를 표시해 준다.
+  const targetId = composeMode === 'follow' ? activeId : null
+
+  // 손으로 옮긴 자리가 있으면 그걸 쓴다
+  const originOf = (id: string, base: Vec3): [number, number, number] =>
+    atomPositions[id] ?? toThree(base, SCALE)
 
   const distance = Math.max(6, molecule.radius * SCALE * 2.4)
 
@@ -80,21 +98,35 @@ export function AtomScene() {
 
         {/* 주제와 주제, 질문과 후속 질문을 잇는 결합 */}
         {molecule.bonds.map((bond) => (
-          <TurnBond key={bond.id} from={bond.from} to={bond.to} />
+          <TurnBond
+            key={bond.id}
+            from={originOf(bond.fromId, bond.from)}
+            to={originOf(bond.toId, bond.to)}
+          />
         ))}
 
         {molecule.atoms.map((item) => (
-          <group key={item.id} position={toThree(item.origin, SCALE)}>
+          <AtomGroup
+            key={item.id}
+            id={item.id}
+            position={originOf(item.id, item.origin)}
+            setDragging={setDragging}
+            guard={dragGuard}
+          >
             <Atom
+              guard={dragGuard}
               atom={item.atom}
               active={item.id === activeId}
+              target={item.id === targetId}
               discussionId={item.id}
               onSelectTurn={() => selectTurn(item.id)}
             />
-          </group>
+          </AtomGroup>
         ))}
 
         <OrbitControls
+          // 원자를 끄는 동안은 카메라가 따라 돌면 안 된다
+          enabled={dragging === null}
           enablePan
           minDistance={distance * 0.15}
           maxDistance={distance * 3}
@@ -112,7 +144,7 @@ export function AtomScene() {
 
       <div className="atom3d__scan" />
       <div className="atom3d__hud">
-        <span>드래그: 회전 · 휠: 확대 · 우클릭 드래그: 이동 · 클릭: 선택</span>
+        <span>드래그: 회전 · 휠: 확대 · 클릭: 선택 · 원자를 끌면 자리 이동</span>
         <button className={spin ? 'is-on' : undefined} onClick={() => setSpin((v) => !v)}>
           자동 회전 {spin ? 'ON' : 'OFF'}
         </button>
@@ -135,7 +167,8 @@ interface MoleculeItem {
 
 interface Molecule {
   atoms: MoleculeItem[]
-  bonds: { id: string; from: Vec3; to: Vec3 }[]
+  /** 양 끝의 턴 id도 들고 있어야 손으로 옮긴 자리를 반영할 수 있다 */
+  bonds: { id: string; fromId: string; toId: string; from: Vec3; to: Vec3 }[]
   /** 분자 전체를 감싸는 반지름 — 카메라 거리를 정한다 */
   radius: number
 }
@@ -165,6 +198,8 @@ function buildMolecule(turns: Turn[]): Molecule {
     .filter((p) => p.parentId && originOf.has(p.parentId))
     .map((p) => ({
       id: `bond-${p.id}`,
+      fromId: p.parentId as string,
+      toId: p.id,
       from: originOf.get(p.parentId as string) as Vec3,
       to: p.position,
     }))
@@ -180,8 +215,14 @@ function buildMolecule(turns: Turn[]): Molecule {
 const ORIGIN3: Vec3 = { x: 0, y: 0, z: 0 }
 
 /** 질문과 후속 질문(또는 다른 주제)을 잇는 굵은 결합 */
-function TurnBond({ from, to }: { from: Vec3; to: Vec3 }) {
-  const points = useMemo(() => [toThree(from, SCALE), toThree(to, SCALE)], [from, to])
+function TurnBond({
+  from,
+  to,
+}: {
+  from: [number, number, number]
+  to: [number, number, number]
+}) {
+  const points = useMemo(() => [from, to], [from, to])
   return (
     <Line
       points={points}
@@ -197,15 +238,25 @@ function TurnBond({ from, to }: { from: Vec3; to: Vec3 }) {
 function Atom({
   atom,
   active,
+  target,
   discussionId,
+  guard,
   onSelectTurn,
 }: {
   atom: AtomModel
   active: boolean
+  /** 다음 질문이 여기에 붙는다 */
+  target: boolean
   discussionId?: string
+  guard: React.RefObject<boolean>
   onSelectTurn: () => void
 }) {
-  const select = useViewStore((s) => s.select)
+  const rawSelect = useViewStore((s) => s.select)
+  // 끈 직후라면 선택하지 않는다
+  const select: typeof rawSelect = (id, intent) => {
+    if (guard.current) return
+    rawSelect(id, intent)
+  }
   const selectedId = useViewStore((s) => s.selectedId)
   const shells = useRef<THREE.Group>(null)
 
@@ -220,8 +271,16 @@ function Atom({
     <group>
       <group ref={shells}>
         {/* 활성 턴만 격자를 조금 밝게 — 크기는 그대로 둔다 */}
-        <Lattice shell={atom.shells[0]} opacity={active ? 0.26 : 0.13} />
-        <Lattice shell={atom.shells[1]} opacity={active ? 0.15 : 0.075} />
+        <Lattice
+          shell={atom.shells[0]}
+          opacity={target ? 0.4 : active ? 0.26 : 0.13}
+          color={target ? TARGET : undefined}
+        />
+        <Lattice
+          shell={atom.shells[1]}
+          opacity={target ? 0.22 : active ? 0.15 : 0.075}
+          color={target ? TARGET : undefined}
+        />
 
         {/* 결합선 — 핵에서 에이전트로, 에이전트에서 도구로 */}
         {atom.links.map((link) => (
@@ -240,6 +299,7 @@ function Atom({
             node={node}
             selected={selectedId === node.id}
             onSelect={() => {
+              if (guard.current) return
               // 에이전트를 고르면 그 턴으로 옮기고 상세를 연다
               onSelectTurn()
               select(node.kind === 'agent' ? node.id : null, 'agent')
@@ -252,14 +312,107 @@ function Atom({
       <Nucleus
         atom={atom}
         active={active}
+        target={target}
         discussionId={discussionId}
         selected={selectedId === atom.rootId}
         onSelect={() => {
+          if (guard.current) return
           // 핵은 질문 그 자체 — 그 턴의 결과를 보여준다
           onSelectTurn()
           select(atom.rootId, 'result')
         }}
       />
+    </group>
+  )
+}
+
+/**
+ * 원자를 끌어서 옮긴다.
+ *
+ * 카메라를 마주 보는 평면 위에서 끈다 — 어느 각도에서 봐도 포인터를 따라오게 하려면
+ * 이 평면이 제일 자연스럽다. 옮긴 자리는 저장되고, 자동 배치 위에 덮어씌워진다.
+ *
+ * 포인터가 원자를 벗어나도 계속 따라와야 하므로 이동/뗌은 window에서 듣는다.
+ * 움직임이 임계값을 넘지 않으면 드래그가 아니라 클릭으로 흘려보낸다 — 안 그러면
+ * 원자를 고를 수 없다.
+ */
+function AtomGroup({
+  id,
+  position,
+  setDragging,
+  guard,
+  children,
+}: {
+  id: string
+  position: [number, number, number]
+  setDragging: (id: string | null) => void
+  /** 끈 직후의 클릭을 선택으로 치지 않기 위한 공유 표시 */
+  guard: React.RefObject<boolean>
+  children: React.ReactNode
+}) {
+  const setAtomPosition = useViewStore((s) => s.setAtomPosition)
+  const camera = useThree((s) => s.camera)
+  const gl = useThree((s) => s.gl)
+
+  const plane = useRef(new THREE.Plane())
+  const grab = useRef(new THREE.Vector3())
+  const moved = useRef(false)
+
+  const onPointerDown = useCallback(
+    (e: { stopPropagation: () => void; ray: THREE.Ray; nativeEvent: PointerEvent }) => {
+      e.stopPropagation()
+      const here = new THREE.Vector3(...position)
+
+      // 카메라를 마주 보는 평면
+      const normal = camera.getWorldDirection(new THREE.Vector3()).negate()
+      plane.current.setFromNormalAndCoplanarPoint(normal, here)
+
+      const hit = new THREE.Vector3()
+      if (!e.ray.intersectPlane(plane.current, hit)) return
+      grab.current.copy(here).sub(hit)
+      moved.current = false
+      guard.current = false
+      setDragging(id)
+
+      const rect = gl.domElement.getBoundingClientRect()
+      const ray = new THREE.Raycaster()
+      const ndc = new THREE.Vector2()
+
+      const onMove = (ev: PointerEvent) => {
+        ndc.set(
+          ((ev.clientX - rect.left) / rect.width) * 2 - 1,
+          -((ev.clientY - rect.top) / rect.height) * 2 + 1,
+        )
+        ray.setFromCamera(ndc, camera)
+        const next = new THREE.Vector3()
+        if (!ray.ray.intersectPlane(plane.current, next)) return
+        next.add(grab.current)
+        if (next.distanceTo(here) > 0.05) {
+          moved.current = true
+          guard.current = true
+        }
+        setAtomPosition(id, [next.x, next.y, next.z])
+      }
+
+      const onUp = () => {
+        window.removeEventListener('pointermove', onMove)
+        window.removeEventListener('pointerup', onUp)
+        setDragging(null)
+        // 이 pointerup 뒤에 오는 click 한 번만 막고 표시를 지운다
+        window.setTimeout(() => {
+          guard.current = false
+        }, 0)
+      }
+
+      window.addEventListener('pointermove', onMove)
+      window.addEventListener('pointerup', onUp)
+    },
+    [camera, gl, guard, id, position, setAtomPosition, setDragging],
+  )
+
+  return (
+    <group position={position} onPointerDown={onPointerDown}>
+      {children}
     </group>
   )
 }
@@ -302,7 +455,15 @@ function ViewportFit() {
 }
 
 /** 오비탈 껍질을 이루는 측지선 격자 — 모서리 선 + 꼭짓점 점 */
-function Lattice({ shell, opacity }: { shell: Shell; opacity: number }) {
+function Lattice({
+  shell,
+  opacity,
+  color = LATTICE,
+}: {
+  shell: Shell
+  opacity: number
+  color?: string
+}) {
   const { lines, points } = useMemo(() => {
     const { vertices, edges } = icosphere(shell.radius, shell.detail)
 
@@ -333,7 +494,7 @@ function Lattice({ shell, opacity }: { shell: Shell; opacity: number }) {
     <group>
       <lineSegments geometry={lines}>
         <lineBasicMaterial
-          color={LATTICE}
+          color={color}
           transparent
           opacity={opacity}
           blending={THREE.AdditiveBlending}
@@ -361,21 +522,24 @@ function Lattice({ shell, opacity }: { shell: Shell; opacity: number }) {
 function Nucleus({
   atom,
   active,
+  target,
   selected,
   discussionId,
   onSelect,
 }: {
   atom: AtomModel
   active: boolean
+  target: boolean
   selected: boolean
   discussionId?: string
   onSelect: () => void
 }) {
   const core = useRef<THREE.MeshStandardMaterial>(null)
-  const color = colorOf(atom.rootStatus)
+  // 다음 질문이 붙을 원자는 상태색을 벗어난 호박색으로 — 한눈에 겨냥한 곳이 보인다
+  const color = target ? TARGET : colorOf(atom.rootStatus)
   const busy = atom.rootStatus === 'running' || atom.rootStatus === 'thinking'
   const r = atom.nucleusRadius * SCALE
-  const base = selected ? 8 : active ? 5.5 : 3
+  const base = target ? 9 : selected ? 8 : active ? 5.5 : 3
 
   useFrame(({ clock }) => {
     if (!busy || !core.current) return
@@ -416,13 +580,15 @@ function Nucleus({
 
       <Html position={[0, -r * 2.2, 0]} center distanceFactor={9} zIndexRange={[11, 0]}>
         <div
-          className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}`}
+          className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}${target ? ' is-target' : ''}`}
           title={atom.question || atom.rootLabel}
         >
           {/* 질문 전문을 띄우면 원자마다 문단이 붙어 화면이 못 읽게 된다.
               여기서는 짧게만 — 전문은 사이드바(결과 탭)에서 읽는다. */}
           <b>{shortTitle(atom.question || atom.rootLabel)}</b>
-          <span>{discussionId ? discussionId.slice(0, 8) : atom.rootLabel}</span>
+          <span>
+            {target ? '↳ 여기에 이어서' : discussionId ? discussionId.slice(0, 8) : atom.rootLabel}
+          </span>
         </div>
       </Html>
     </group>

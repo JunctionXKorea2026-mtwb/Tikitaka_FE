@@ -143,3 +143,10 @@
   border-color: color-mix(in srgb, var(--accent) 70%, transparent);
   box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 30%, transparent);
 }
+
+/* 다음 질문이 붙을 원자 — 상태색 계열을 벗어난 호박색으로 겨냥점을 표시한다 */
+.nucleus__label.is-target {
+  --accent: #ffb347;
+  border-color: color-mix(in srgb, #ffb347 75%, transparent);
+  box-shadow: 0 0 30px color-mix(in srgb, #ffb347 40%, transparent);
+}

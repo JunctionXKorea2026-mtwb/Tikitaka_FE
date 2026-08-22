@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { isLiveBackend } from '../../transport'
 import { activeTurn, useRunStore } from '../../stores/runStore'
+import { useViewStore } from '../../stores/viewStore'
 
 const EXAMPLES = [
   '2024년 전기차 시장 규모와 성장률을 조사해서 리포트로 정리해줘',
@@ -15,7 +16,10 @@ export function PromptBar() {
   const turnCount = useRunStore((s) => s.turns.length)
 
   const [text, setText] = useState('')
-  const [newTopic, setNewTopic] = useState(false)
+  // 3D도 "다음 질문이 어디에 붙는지"를 알아야 대상 원자를 표시할 수 있다
+  const composeMode = useViewStore((s) => s.composeMode)
+  const setComposeMode = useViewStore((s) => s.setComposeMode)
+  const newTopic = composeMode === 'new'
   const areaRef = useRef<HTMLTextAreaElement>(null)
 
   // 페이지에 들어오면 바로 입력할 수 있게
@@ -87,14 +91,14 @@ export function PromptBar() {
             <button
               type="button"
               data-active={!newTopic || undefined}
-              onClick={() => setNewTopic(false)}
+              onClick={() => setComposeMode('follow')}
             >
               이어서 질문
             </button>
             <button
               type="button"
               data-active={newTopic || undefined}
-              onClick={() => setNewTopic(true)}
+              onClick={() => setComposeMode('new')}
             >
               새 주제
             </button>

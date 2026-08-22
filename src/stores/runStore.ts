@@ -268,3 +268,36 @@ export function useRunState(): RunState {
 export function runStateOf(turn: Turn): RunState {
   return reduceEvents(turn.id, turn.events)
 }
+
+/**
+ * 대화 목록에 붙일 번호.
+ *
+ * 뿌리(새 주제)는 1, 2, 3…
+ * 이어서 물은 턴은 부모 번호에 이어 붙인다 — 2의 첫 후속 질문은 2-1, 그다음은 2-2.
+ * 더 깊이 들어가면 2-1-1 처럼 계속 이어진다.
+ *
+ * 구분선 대신 번호가 구조를 말하게 한다. 목록은 만들어진 순서 그대로 둔다.
+ */
+export function turnNumbers(turns: Turn[]): Map<string, string> {
+  const known = new Set(turns.map((t) => t.id))
+  const childCount = new Map<string, number>()
+  const numbers = new Map<string, string>()
+  let rootCount = 0
+
+  for (const turn of turns) {
+    // 부모가 목록에 없으면 (지워졌다면) 뿌리로 취급한다
+    const parentId = turn.parentId && known.has(turn.parentId) ? turn.parentId : null
+
+    if (!parentId) {
+      rootCount += 1
+      numbers.set(turn.id, String(rootCount))
+      continue
+    }
+
+    const n = (childCount.get(parentId) ?? 0) + 1
+    childCount.set(parentId, n)
+    numbers.set(turn.id, `${numbers.get(parentId) ?? '?'}-${n}`)
+  }
+
+  return numbers
+}

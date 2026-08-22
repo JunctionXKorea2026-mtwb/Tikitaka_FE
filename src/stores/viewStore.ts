@@ -24,12 +24,22 @@ interface ViewStore {
   panelOpen: boolean
   /** 사이드바 너비 (px). 드래그로 조절하고 저장된다. */
   panelWidth: number
+  /**
+   * 사용자가 손으로 옮긴 원자의 위치 (three 월드 좌표).
+   * 자동 배치 결과 위에 덮어씌워지므로, 턴이 늘어나도 옮겨둔 자리는 유지된다.
+   */
+  atomPositions: Record<string, [number, number, number]>
+  /** 다음 질문이 이어서인지 새 주제인지. 3D가 대상 원자를 표시하는 데도 쓴다. */
+  composeMode: 'follow' | 'new'
 
   select: (id: string | null, intent?: PanelTab) => void
   setTab: (tab: PanelTab) => void
   toggleDimension: () => void
   closePanel: () => void
   setPanelWidth: (width: number) => void
+  setAtomPosition: (id: string, pos: [number, number, number]) => void
+  resetAtomPositions: () => void
+  setComposeMode: (mode: 'follow' | 'new') => void
   setResultExpanded: (expanded: boolean) => void
   setPosition: (id: string, pos: XYPosition) => void
   resetPositions: () => void
@@ -50,6 +60,8 @@ export const useViewStore = create<ViewStore>()(
       dimension: '3d',
       panelOpen: false,
       panelWidth: 400,
+      atomPositions: {},
+      composeMode: 'follow',
 
       /**
        * 노드를 고르는 행위 자체가 "상세를 보겠다"는 뜻이다.
@@ -68,6 +80,10 @@ export const useViewStore = create<ViewStore>()(
       closePanel: () => set({ panelOpen: false, selectedId: null }),
       setPanelWidth: (width) =>
         set({ panelWidth: Math.max(MIN_PANEL, Math.min(MAX_PANEL, Math.round(width))) }),
+      setAtomPosition: (id, pos) =>
+        set((s) => ({ atomPositions: { ...s.atomPositions, [id]: pos } })),
+      resetAtomPositions: () => set({ atomPositions: {} }),
+      setComposeMode: (composeMode) => set({ composeMode }),
       setResultExpanded: (resultExpanded) => set({ resultExpanded }),
       setPosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
       resetPositions: () => set({ positions: {} }),
@@ -77,7 +93,11 @@ export const useViewStore = create<ViewStore>()(
       name: 'agent-flow-view',
       // 화면 상태 중 "다음에도 유지되면 좋은 것"만 저장한다.
       // 선택·열림은 매번 새로 시작하는 게 자연스럽다.
-      partialize: (s) => ({ panelWidth: s.panelWidth, dimension: s.dimension }),
+      partialize: (s) => ({
+        panelWidth: s.panelWidth,
+        dimension: s.dimension,
+        atomPositions: s.atomPositions,
+      }),
     },
   ),
 )

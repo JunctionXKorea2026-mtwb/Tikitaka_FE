@@ -308,11 +308,13 @@
   cursor: pointer;
 }
 
+/* 1, 2, 2-1 … 번호가 대화 구조를 말한다 (구분선 대신) */
 .turn__index {
   flex: none;
   display: grid;
   place-items: center;
-  width: 18px;
+  min-width: 18px;
+  padding: 0 5px;
   height: 18px;
   margin-top: 1px;
   border-radius: 5px;
@@ -354,24 +356,7 @@
   border-left-color: color-mix(in srgb, var(--running) 45%, transparent);
 }
 
-/* 새 주제 앞의 구분선 */
-.turn__divider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 2px 0 2px -10px;
-  color: var(--muted);
-  font-size: 9px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
 
-.turn__divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
 
 /* 실행 id — 실제 백엔드에서는 discussionId. 클릭하면 복사된다. */
 .turn__id {
