@@ -1,0 +1,152 @@
+/*
+ * 3D 홀로그램 뷰.
+ *
+ * 구체·궤도·별은 three.js가 그린다 (AtomScene.tsx). 여기 남은 CSS는
+ * 컨테이너와, three 위에 얹히는 DOM 라벨(drei의 Html)뿐이다.
+ *
+ * 팔레트는 3D 안에서만 푸른 계열로 통일한다 (2D는 원래 색 유지).
+ * error만 계열 밖에 둔다 — 실패가 파랗게 묻히면 안 된다.
+ */
+
+.atom3d {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: #03050d;
+}
+
+.atom3d canvas {
+  display: block;
+  outline: none;
+  touch-action: none;
+}
+
+.atom3d--loading {
+  display: grid;
+  place-items: center;
+  color: #6d86ad;
+  font-size: 12px;
+}
+
+/* ---------- 푸른 계열 팔레트 (3D 라벨용) ---------- */
+
+.atom3d .status-running { --accent: #3f9dff; }
+.atom3d .status-thinking { --accent: #9fb9ff; }
+.atom3d .status-calling { --accent: #7b74ff; }
+.atom3d .status-done { --accent: #45dcff; }
+.atom3d .status-error { --accent: #ff5f80; }
+
+.atom3d .tool-running { --accent: #7b74ff; }
+.atom3d .tool-ok { --accent: #45dcff; }
+.atom3d .tool-error { --accent: #ff5f80; }
+
+/* ---------- 오버레이 ---------- */
+
+.atom3d__scan {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(120, 180, 255, 0.022) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.atom3d__hud {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+
+.atom3d__hud span,
+.atom3d__hud button {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(90, 140, 220, 0.28);
+  background: rgba(6, 12, 26, 0.72);
+  color: #7f9ac4;
+  font: inherit;
+  font-size: 10px;
+}
+
+.atom3d__hud span {
+  pointer-events: none;
+}
+
+.atom3d__hud button {
+  cursor: pointer;
+}
+
+.atom3d__hud button.is-on {
+  border-color: rgba(63, 157, 255, 0.6);
+  color: #6fb6ff;
+}
+
+/* ---------- 라벨 (three 위에 얹히는 DOM) ---------- */
+
+.orb__label {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, transparent);
+  border-left: 2px solid var(--accent);
+  background: rgba(4, 9, 20, 0.72);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+  box-shadow: 0 0 20px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.orb__label b {
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 620;
+  color: #dbeaff;
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 70%, transparent);
+}
+
+.orb__label span {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--accent);
+}
+
+.orb--tool-label {
+  padding: 2px 7px;
+}
+
+.orb--tool-label b {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: #8ea6cc;
+}
+
+.nucleus__label {
+  padding: 5px 11px;
+}
+
+.nucleus__label b {
+  font-size: 12.5px;
+}
+
+/* 활성 턴의 핵 라벨 — 어느 턴이 패널·타임라인과 묶여 있는지 */
+.nucleus__label.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 30%, transparent);
+}
+
+/* 다음 질문이 붙을 원자 — 상태색 계열을 벗어난 호박색으로 겨냥점을 표시한다 */
+.nucleus__label.is-target {
+  --accent: #ffb347;
+  border-color: color-mix(in srgb, #ffb347 75%, transparent);
+  box-shadow: 0 0 30px color-mix(in srgb, #ffb347 40%, transparent);
+}

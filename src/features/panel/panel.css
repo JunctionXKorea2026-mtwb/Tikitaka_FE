@@ -1,0 +1,113 @@
+.panel {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  width: var(--panel-w, 400px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(10px);
+  border-left: 1px solid var(--line);
+  box-shadow: -18px 0 40px rgb(0 0 0 / 0.35);
+  animation: panel-in 0.18s ease-out;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+/* 왼쪽 모서리를 끌어 너비를 조절한다 (더블클릭하면 가운데 값으로) */
+.panel__resize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel__resize::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.panel__resize:hover::after,
+.panel__resize:active::after {
+  background: var(--running);
+}
+
+.panel__close {
+  margin-left: auto;
+  align-self: center;
+  padding: 4px 8px !important;
+  border-bottom: none !important;
+  color: var(--muted);
+  font-size: 11px !important;
+}
+
+.panel__close:hover {
+  color: var(--text);
+}
+
+.panel__tabs {
+  display: flex;
+  gap: 2px;
+  padding: 8px 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.panel__tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.panel__tabs button:hover {
+  color: var(--text);
+}
+
+.panel__tabs button[data-active] {
+  color: var(--text);
+  border-bottom-color: var(--running);
+}
+
+.tab-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.tab-dot.is-done {
+  background: var(--done);
+}
+
+.tab-dot.is-error {
+  background: var(--error);
+}
+
+.panel__body {
+  overflow-y: auto;
+  min-height: 0;
+}

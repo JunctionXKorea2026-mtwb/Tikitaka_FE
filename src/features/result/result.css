@@ -1,0 +1,488 @@
+.result {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 24px;
+}
+
+.result h3 {
+  margin: 0 0 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------- 요청 ---------- */
+
+.result__request p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+/* ---------- 답변 ---------- */
+
+.answer {
+  --accent: var(--done);
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: color-mix(in srgb, var(--accent) 7%, var(--panel-2));
+}
+
+.answer--error {
+  --accent: var(--error);
+}
+
+.answer__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.answer__head h3 {
+  margin: 0;
+  flex: 1;
+}
+
+.answer__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.answer__copy {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.answer__copy:hover {
+  color: var(--text);
+}
+
+.answer__text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.answer__text--lg {
+  font-size: 15px;
+  line-height: 1.85;
+}
+
+.answer__inspect {
+  margin-top: 12px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.answer__inspect:hover {
+  text-decoration: underline;
+}
+
+/* ---------- 진행 중 ---------- */
+
+.result__idle {
+  margin: 0;
+  padding: 14px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.progress ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress__row {
+  --accent: var(--running);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border-left: 2px solid var(--accent);
+  background: var(--panel-2);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.progress__row strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.progress__row span {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 45%;
+}
+
+/* ---------- 통계 ---------- */
+
+.result__stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin: 0;
+}
+
+.result__stats div {
+  padding: 8px 9px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.result__stats dt {
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.result__stats dd {
+  margin: 3px 0 0;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.result__stats dd.is-warn {
+  color: var(--error);
+}
+
+.result__expand {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.result__expand:hover {
+  border-color: #3a3a46;
+}
+
+/* ---------- 확대 오버레이 ---------- */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+  background: rgb(6 6 10 / 0.72);
+  backdrop-filter: blur(4px);
+  animation: overlay-in 0.18s ease-out;
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.overlay__card {
+  position: relative;
+  width: min(860px, 100%);
+  max-height: 100%;
+  overflow-y: auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 24px 70px rgb(0 0 0 / 0.6);
+  animation: card-in 0.24s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.99);
+  }
+}
+
+.overlay__close {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 1;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.overlay__close:hover {
+  color: var(--text);
+}
+
+.result--expanded {
+  gap: 20px;
+  padding: 28px 32px 32px;
+}
+
+.result--expanded .result__request p {
+  font-size: 14px;
+}
+
+.result--expanded .answer {
+  padding: 20px;
+}
+
+.result--expanded .result__stats dd {
+  font-size: 14px;
+}
+
+/* ---------- 대화 (턴 목록) ---------- */
+
+.turn {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+}
+
+/* 활성 턴만 테두리로 표시한다 — 캔버스가 보고 있는 턴 */
+.turn.is-active {
+  border-color: color-mix(in srgb, var(--running) 30%, var(--line));
+  background: color-mix(in srgb, var(--running) 4%, var(--panel-2));
+}
+
+.turn__ask {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* 1, 2, 2-1 … 번호가 대화 구조를 말한다 (구분선 대신) */
+.turn__index {
+  flex: none;
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  padding: 0 5px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 5px;
+  background: var(--line);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.turn.is-active .turn__index {
+  background: var(--running);
+  color: #fff;
+}
+
+.turn__prompt {
+  white-space: pre-wrap;
+}
+
+.turn__folded {
+  margin: 0 0 0 26px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.turn__folded:hover {
+  color: var(--text);
+}
+
+/* 후속 질문은 살짝 들여써서 사슬임을 보인다 */
+/* 들여쓰기 폭은 깊이에 따라 인라인으로 준다 */
+.turn--child {
+  border-left: 1px solid var(--line);
+  border-radius: 0 10px 10px 0;
+}
+
+.turn--child.is-active {
+  border-left-color: color-mix(in srgb, var(--running) 45%, transparent);
+}
+
+
+
+/* 실행 id — 실제 백엔드에서는 discussionId. 클릭하면 복사된다. */
+.turn__id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-left: 26px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.turn__id:hover {
+  border-color: #3a3a46;
+  color: var(--text);
+}
+
+.turn__id.is-copied {
+  border-color: color-mix(in srgb, var(--done) 55%, transparent);
+  color: var(--done);
+}
+
+.turn__id-key {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.turn__id code {
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turn__id-copy {
+  flex: none;
+  font-size: 9px;
+  opacity: 0.7;
+}
+
+/* 접기와 "보러 가기"를 분리한다 — 카드를 누르면 접힐 뿐 화면이 튀지 않는다 */
+.turn__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.turn__row .turn__ask {
+  flex: 1;
+  min-width: 0;
+}
+
+.turn__caret {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.turn__goto,
+.turn__here {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.turn__goto {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.turn__goto:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--running) 50%, transparent);
+}
+
+.turn__here {
+  border: 1px solid color-mix(in srgb, var(--running) 45%, transparent);
+  color: var(--running);
+}
+
+/* 요약 제목 아래 원문 질문 — 요약이 원문을 가리지 않게 */
+.turn__full {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 결론 요약 — 원문 위에 먼저 읽을 것 */
+.answer__digest {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.answer__digest-key {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}

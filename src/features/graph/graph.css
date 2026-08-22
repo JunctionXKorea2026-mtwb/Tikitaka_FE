@@ -1,0 +1,242 @@
+.react-flow {
+  background: var(--bg);
+}
+
+/* ---------- agent node ---------- */
+
+.node {
+  --accent: var(--muted);
+  font-family: var(--font);
+}
+
+.node--agent {
+  width: 210px;
+  height: 88px;
+  padding: 9px 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  background: var(--panel);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.35);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.node--agent[data-selected] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 6px 20px rgb(0 0 0 / 0.4);
+}
+
+.status-running { --accent: var(--running); }
+.status-thinking { --accent: var(--thinking); }
+.status-calling { --accent: var(--calling); }
+.status-done { --accent: var(--done); }
+.status-error { --accent: var(--error); }
+
+.node__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.node__role {
+  flex: none;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+}
+
+.node__title {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.node__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.node__status {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.node__time {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.node__detail {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.3; transform: scale(0.7); }
+}
+
+/* ---------- tool node ---------- */
+
+.node--tool {
+  width: 150px;
+  height: 40px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 8px;
+  border: 1px dashed var(--line);
+  background: var(--panel-2);
+  font-size: 11px;
+}
+
+.tool__mark {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.tool__name {
+  font-family: var(--mono);
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tool-running { border-color: color-mix(in srgb, var(--calling) 50%, transparent); }
+.tool-running .tool__mark { color: var(--calling); }
+.tool-ok .tool__mark { color: var(--done); }
+.tool-error { border-color: color-mix(in srgb, var(--error) 50%, transparent); }
+.tool-error .tool__mark { color: var(--error); }
+
+/* ---------- handles ---------- */
+
+.react-flow__handle {
+  width: 6px;
+  height: 6px;
+  border: none;
+  background: #3a3a46;
+}
+
+/* ---------- edges ---------- */
+
+.edge--spawn {
+  stroke: #3a3a46;
+  stroke-width: 1.5;
+}
+
+.edge--tool {
+  stroke: #2e2e38;
+  stroke-width: 1.2;
+  stroke-dasharray: 3 3;
+}
+
+.edge--message {
+  stroke: #4b5563;
+  stroke-width: 1.5;
+}
+
+.edge--message.is-active {
+  stroke: var(--running);
+  stroke-width: 2;
+}
+
+.edge__packet {
+  fill: var(--running);
+  filter: drop-shadow(0 0 5px var(--running));
+}
+
+.edge__label {
+  position: absolute;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+  pointer-events: all;
+  white-space: nowrap;
+}
+
+.edge__label.is-active {
+  border-color: color-mix(in srgb, var(--running) 55%, transparent);
+  color: var(--running);
+}
+
+/* ---------- controls / minimap ---------- */
+
+.react-flow__controls-button {
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  fill: var(--text);
+}
+
+/* ---------- 빈 캔버스 안내 ---------- */
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.canvas-empty__mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.canvas-empty h2 {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.canvas-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+}

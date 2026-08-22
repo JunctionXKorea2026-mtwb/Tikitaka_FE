@@ -1,0 +1,165 @@
+.prompt {
+  padding: 14px 16px 18px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.prompt__inner {
+  width: min(920px, 100%);
+  margin: 0 auto;
+}
+
+/* ---------- 예시 칩 ---------- */
+
+.prompt__examples {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.prompt__examples-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.prompt__example {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.prompt__example:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--running) 50%, transparent);
+}
+
+/* ---------- 입력 필드 ---------- */
+
+.prompt__field {
+  padding: 14px 16px 10px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.prompt__field:focus-within {
+  border-color: color-mix(in srgb, var(--running) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--running) 14%, transparent);
+}
+
+.prompt__input {
+  display: block;
+  width: 100%;
+  min-height: 48px;
+  max-height: 200px;
+  border: none;
+  outline: none;
+  background: none;
+  resize: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.prompt__input::placeholder {
+  color: #5c5c6b;
+}
+
+.prompt__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.prompt__keys {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.prompt__keys kbd {
+  padding: 1px 5px;
+  border-radius: 4px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.prompt__send {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 20px;
+  border-radius: 10px;
+  border: none;
+  background: var(--running);
+  color: #fff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.prompt__send:hover:not(:disabled) {
+  background: #2f74e6;
+}
+
+.prompt__send:disabled {
+  background: #2a2a34;
+  color: #5c5c6b;
+  cursor: not-allowed;
+}
+
+.prompt__send span {
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+.prompt__mock {
+  margin: 8px 2px 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* 이어서 질문 / 새 주제 — 자동 판별하지 않고 사용자가 고른다 */
+.prompt__mode {
+  display: inline-flex;
+  padding: 2px;
+  margin-bottom: 8px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.prompt__mode button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.prompt__mode button[data-active] {
+  background: var(--running);
+  color: #fff;
+}

@@ -1,0 +1,222 @@
+/* 패널(.panel__body)이 배경과 스크롤을 담당한다. 여기서는 여백만. */
+.inspector {
+  padding: 14px 16px 24px;
+}
+
+.inspector--empty {
+  display: grid;
+  place-items: center;
+  min-height: 160px;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.inspector__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.inspector__head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.inspector__facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0 0 18px;
+}
+
+.inspector__facts div {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.inspector__facts dt {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.inspector__facts dd {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.inspector__section {
+  margin-bottom: 18px;
+}
+
+.inspector__section h3 {
+  margin: 0 0 8px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.inspector__result {
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.calls,
+.log {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.call {
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  border-left: 2px solid var(--line);
+  background: var(--panel-2);
+}
+
+.call.tool-running { border-left-color: var(--calling); }
+.call.tool-ok { border-left-color: var(--done); }
+.call.tool-error { border-left-color: var(--error); }
+
+.call__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 11px;
+}
+
+.call__head code {
+  font-family: var(--mono);
+  color: var(--text);
+}
+
+.call__head span {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+
+.call__io {
+  margin: 2px 0 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.log li {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+  font-size: 11px;
+}
+
+.log__ts {
+  flex: none;
+  width: 42px;
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+.log__text {
+  color: #c9c9d6;
+  line-height: 1.5;
+}
+
+/* ---------- 발언 ---------- */
+
+.speeches {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.speech {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.speech.is-open {
+  border-color: color-mix(in srgb, var(--running) 30%, var(--line));
+}
+
+.speech__head {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.speech__caret {
+  flex: none;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.speech__summary {
+  flex: 1;
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.speech__ts {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.speech__text {
+  margin: 0;
+  padding: 0 9px 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 9px;
+  color: #c9c9d6;
+  font-size: 11.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
