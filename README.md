@@ -40,8 +40,9 @@ src/
 ├─ transport/         드라이버 추상화 — scenario(프롬프트→시나리오), mockDriver, sseDriver
 ├─ stores/            runStore(도메인) / viewStore(선택·좌표 오버라이드·필터·차원)
 └─ features/
-   ├─ graph/          2D — FlowCanvas, derive, layout/elk, nodes/, edges/, CanvasEmpty
-   ├─ graph3d/        3D — projection, scene, Flow3D (canvas 직접 렌더, 의존성 없음)
+   ├─ graph/          2D — FlowCanvas, derive, layout/elk, edges/, CanvasEmpty
+   │                  nodes/cards.tsx = 두 뷰가 공유하는 카드 생김새
+   ├─ graph3d/        3D — scene(좌표·엣지 변환), Flow3D (CSS 3D, 의존성 없음)
    ├─ prompt/         하단 요청 입력 바 (Enter 전송 / Shift+Enter 줄바꿈)
    ├─ panel/          우측 탭 패널 셸 (결과 ↔ 에이전트)
    ├─ result/         요청↔답변 뷰 + 크게 보기 오버레이
@@ -75,19 +76,23 @@ ELK y  →  Z   형제 노드가 퍼지는 깊이 축
    —   →  Y   에이전트는 평면(0), 도구는 그 아래(150)
 ```
 
-3D는 three.js 없이 `canvas` 2D에 직접 투영한다 (`graph3d/projection.ts`). 노드가 20개
-남짓이라 궤도 회전(yaw/pitch)과 원근 투영이면 충분하고, 번들이 늘지 않는다.
+3D는 three.js 없이 **CSS 3D로 실제 2D 카드 컴포넌트를 세운다.** canvas에 다시 그리면
+디자인이 반드시 두 벌로 갈라지므로, 카드의 생김새는 `graph/nodes/cards.tsx` 하나만 두고
+2D(React Flow 노드)와 3D(상자 앞면)가 그걸 공유한다.
 
-노드는 평면 카드가 아니라 **직육면체**로 그린다. 면을 골라내지(back-face culling) 않고
-6면을 전부 그린 뒤 면 중심 깊이순으로 덮어쓴다 — 볼록한 불투명 상자에서는 이게 은면 제거와
-결과가 같으면서 와인딩 실수가 생길 여지가 없다. 밝기는 면의 **월드 법선**에 고정해서
-(윗면 1.42 · 옆면 0.82~0.92 · 아랫면 0.55) 궤도를 돌려도 광원이 위에 머문다.
-바닥에는 타원 그림자와 낙하선을 깔아 높이 차이를 읽게 했다.
+```
+상자 = 앞면(2D 카드 그대로) + 두께를 만드는 다섯 면
+```
 
-라벨만 화면 정렬(빌보드)이다. 원근 사각형에 글자를 얹으려면 호모그래피가 필요한데
-캔버스 2D는 아핀까지만 지원해서 각도가 커지면 뭉개진다. 상자는 입체로, 글자는 항상 읽히게.
+옆면 음영은 면의 **월드 방향**에 고정해서(윗면이 가장 밝다) 궤도를 돌려도 광원이 위에 머문다.
+바닥에는 격자·타원 그림자·낙하선을 깔아 높이 차이를 읽게 했다.
 
-조작: 드래그 회전 · 휠 확대 · 클릭 선택 (선택은 2D와 공유되어 인스펙터가 함께 따라간다).
+엣지는 얇은 `div`를 3D 회전시켜 잇는다. 시작점에서 끝점으로 향하는 변환은
+`rotateY(atan2(-dz, dx)) rotateZ(asin(dy/L))` — CSS 회전 행렬로 검증했다
+(`scene.ts`의 `segmentTransform`).
+
+글자를 브라우저가 렌더하므로 어느 각도에서도 선명하고, 2D 카드의 상태 색·펄스·역할 배지가
+그대로 살아 있다.
 
 ## 요청과 최종 답변
 

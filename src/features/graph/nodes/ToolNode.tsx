@@ -1,17 +1,12 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react'
 import type { ToolFlowNode } from '../derive'
+import { ToolCard } from './cards'
 
-type ToolNodeProps = NodeProps<ToolFlowNode>
-
-const MARK = { running: '···', ok: '✓', error: '✕' } as const
-
-export function ToolNode({ data }: ToolNodeProps) {
+export function ToolNode({ data }: NodeProps<ToolFlowNode>) {
   return (
-    <div className={`node node--tool tool-${data.status}`}>
+    <ToolCard data={data}>
       <Handle type="target" position={Position.Left} />
-      <span className="tool__mark">{MARK[data.status]}</span>
-      <span className="tool__name">{data.name}</span>
       <Handle type="source" position={Position.Right} />
-    </div>
+    </ToolCard>
   )
 }

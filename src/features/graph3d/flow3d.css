@@ -1,18 +1,27 @@
 .flow3d {
   position: absolute;
   inset: 0;
-}
-
-.flow3d__canvas {
-  display: block;
-  width: 100%;
-  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
   cursor: grab;
   touch-action: none;
+  /* 원근 거리. 클수록 왜곡이 약해진다 */
+  perspective: 1800px;
+  perspective-origin: 50% 46%;
 }
 
-.flow3d__canvas:active {
+.flow3d:active {
   cursor: grabbing;
+}
+
+/* 무대의 원점을 화면 중앙에 둔다. 실제 변환은 JS가 직접 쓴다. */
+.flow3d__stage {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
 }
 
 .flow3d__hint {
@@ -25,5 +34,209 @@
   background: color-mix(in srgb, var(--panel) 80%, transparent);
   color: var(--muted);
   font-size: 10px;
+  pointer-events: none;
+}
+
+/* ---------- 상자 ---------- */
+
+.n3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  transform-style: preserve-3d;
+  cursor: pointer;
+}
+
+.n3d__face {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+/* 앞면 = 2D 카드 그대로. 카드가 자기 크기를 갖고 있어 배경을 따로 주지 않는다. */
+.n3d__front,
+.n3d__back {
+  width: var(--w);
+  height: var(--h);
+  margin-left: calc(var(--w) / -2);
+  margin-top: calc(var(--h) / -2);
+}
+
+.n3d__front {
+  transform: translateZ(calc(var(--d) / 2));
+}
+
+.n3d__back {
+  transform: translateZ(calc(var(--d) / -2));
+}
+
+.n3d__left,
+.n3d__right {
+  width: var(--d);
+  height: var(--h);
+  margin-left: calc(var(--d) / -2);
+  margin-top: calc(var(--h) / -2);
+}
+
+.n3d__right {
+  transform: rotateY(90deg) translateZ(calc(var(--w) / 2));
+}
+
+.n3d__left {
+  transform: rotateY(-90deg) translateZ(calc(var(--w) / 2));
+}
+
+.n3d__top,
+.n3d__bottom {
+  width: var(--w);
+  height: var(--d);
+  margin-left: calc(var(--w) / -2);
+  margin-top: calc(var(--d) / -2);
+}
+
+.n3d__top {
+  transform: rotateX(90deg) translateZ(calc(var(--h) / 2));
+}
+
+.n3d__bottom {
+  transform: rotateX(-90deg) translateZ(calc(var(--h) / 2));
+}
+
+/*
+ * 옆면 음영은 면의 "월드 방향"에 고정한다 — 광원이 위에 머물러야
+ * 궤도를 돌려도 입체감이 유지된다. (앞면은 카드가 직접 칠한다)
+ */
+.n3d__top {
+  background: color-mix(in srgb, var(--accent) 24%, #24242f);
+}
+
+.n3d__right {
+  background: color-mix(in srgb, var(--accent) 15%, #15151d);
+}
+
+.n3d__left {
+  background: color-mix(in srgb, var(--accent) 11%, #0f0f15);
+}
+
+.n3d__back {
+  background: color-mix(in srgb, var(--accent) 9%, #0d0d13);
+  border-radius: 10px;
+}
+
+.n3d__bottom {
+  background: color-mix(in srgb, var(--accent) 7%, #08080c);
+}
+
+.n3d.is-selected .n3d__top {
+  background: color-mix(in srgb, var(--accent) 42%, #24242f);
+}
+
+/* 도구 상태는 --accent를 따로 정의해 준다 (graph.css는 테두리색만 잡는다) */
+.n3d.tool-running { --accent: var(--calling); }
+.n3d.tool-ok { --accent: var(--done); }
+.n3d.tool-error { --accent: var(--error); }
+
+/* 3D에서는 React Flow 핸들이 필요 없다 */
+.n3d .react-flow__handle {
+  display: none;
+}
+
+/* ---------- 엣지 ---------- */
+
+.e3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 2px;
+  margin-top: -1px;
+  transform-origin: 0 50%;
+  pointer-events: none;
+}
+
+.e3d--spawn {
+  background: rgba(170, 170, 200, 0.5);
+}
+
+.e3d--tool {
+  height: 1px;
+  margin-top: -0.5px;
+  background: repeating-linear-gradient(
+    to right,
+    rgba(140, 140, 170, 0.5) 0 5px,
+    transparent 5px 10px
+  );
+}
+
+.e3d--message {
+  background: rgba(110, 120, 150, 0.45);
+}
+
+.e3d--message.is-active {
+  height: 3px;
+  margin-top: -1.5px;
+  background: var(--running);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--running) 60%, transparent);
+}
+
+.e3d__packet {
+  position: absolute;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin: -4.5px 0 0 -4.5px;
+  border-radius: 50%;
+  background: var(--running);
+  box-shadow: 0 0 10px var(--running);
+  animation: packet3d 1.2s linear infinite;
+}
+
+@keyframes packet3d {
+  from {
+    left: 0%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+/* ---------- 바닥 ---------- */
+
+.grid3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(120, 120, 150, 0.13) 0 1px,
+      transparent 1px 120px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(120, 120, 150, 0.13) 0 1px,
+      transparent 1px 120px
+    );
+  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 78%);
+}
+
+.shadow3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), transparent 70%);
+  pointer-events: none;
+}
+
+.drop3d {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 1px;
+  transform-origin: 0 50%;
+  background: rgba(150, 150, 190, 0.16);
   pointer-events: none;
 }
