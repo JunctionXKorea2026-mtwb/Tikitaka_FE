@@ -38,6 +38,8 @@ export function Flow3D() {
   bodiesRef.current = atom.bodies
   const fitRef = useRef(fit)
   fitRef.current = fit
+  const extentRef = useRef(atom.extent)
+  extentRef.current = atom.extent
 
   const orbRefs = useRef(new Map<string, HTMLElement>())
   const ringRefs = useRef(new Map<string, HTMLElement>())
@@ -80,6 +82,14 @@ export function Flow3D() {
       const t = now / 1000
       const positions = solvePositions(bodiesRef.current, t)
 
+      // 깊이에 따른 광도. 100,000 Stars처럼 가까운 광원이 더 밝게 타오르게 한다.
+      // 무대가 rotateX(pitch)·rotateY(yaw)를 적용하므로 같은 회전으로 z를 구한다.
+      const cyaw = Math.cos(cam.current.yaw + cam.current.spinOffset)
+      const syaw = Math.sin(cam.current.yaw + cam.current.spinOffset)
+      const cpit = Math.cos(cam.current.pitch)
+      const spit = Math.sin(cam.current.pitch)
+      const reach = Math.max(160, extentRef.current)
+
       // 무대는 rotateX(pitch)·rotateY(yaw)를 적용한다.
       // 라벨이 정면을 보려면 그 역인 rotateY(−yaw)·rotateX(−pitch)를 걸면 된다.
       const { yaw, pitch, spinOffset } = cam.current
@@ -88,7 +98,12 @@ export function Flow3D() {
       for (const body of bodiesRef.current) {
         const p = positions.get(body.id)
         const el = orbRefs.current.get(body.id)
-        if (p && el) el.style.transform = `translate3d(${p.x}px, ${p.y}px, ${p.z}px)`
+        if (p && el) {
+          el.style.transform = `translate3d(${p.x}px, ${p.y}px, ${p.z}px)`
+          const depth = p.y * spit + (-p.x * syaw + p.z * cyaw) * cpit
+          const lum = 0.42 + 0.58 * Math.max(0, Math.min(1, depth / reach / 2 + 0.5))
+          el.style.setProperty('--lum', lum.toFixed(3))
+        }
 
         const label = labelRefs.current.get(body.id)
         if (label) label.style.transform = billboard
@@ -270,8 +285,10 @@ export function Flow3D() {
               pick(body.kind === 'agent' ? body.id : null)
             }}
           >
+            {/* 별처럼 보이게 하는 세 겹: 넓은 헤일로 → 회절 스파이크 → 흰 코어 */}
+            <i className="orb__halo" />
+            <i className="orb__spike" />
             <i className="orb__core" />
-            <i className="orb__trail" />
             <div className="orb__label" ref={setRef(labelRefs, body.id)}>
               <b>{body.label}</b>
               {body.kind === 'agent' && <span>{body.status}</span>}
