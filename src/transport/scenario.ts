@@ -143,6 +143,7 @@ function buildResearch(
     ts: at(0.5),
     agentId: 'researcher',
     summary: `검색 쿼리 생성: "${query}"`,
+    detail: `"${query}" 로 검색합니다.\n\n관련도가 높은 문서를 골라 원문을 받아온 뒤 Analyst에게 넘기겠습니다.`,
   })
   ev.push({
     type: 'tool.called',

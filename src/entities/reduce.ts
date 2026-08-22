@@ -25,6 +25,7 @@ export function reduceEvents(runId: string, events: AgentEvent[]): RunState {
           startedAt: ev.ts,
           calls: [],
           log: [{ ts: ev.ts, kind: ev.type, text: `${ev.label} 시작` }],
+          speeches: [],
         }
         state.agents[ev.agentId] = agent
         state.agentOrder.push(ev.agentId)
@@ -37,6 +38,10 @@ export function reduceEvents(runId: string, events: AgentEvent[]): RunState {
         agent.status = 'thinking'
         agent.thought = ev.summary
         agent.log.push({ ts: ev.ts, kind: ev.type, text: ev.summary ?? '사고 중' })
+        // 전문이 오면 따로 쌓는다 — 로그는 한 줄짜리라 긴 발언을 담기에 맞지 않는다
+        if (ev.detail) {
+          agent.speeches.push({ ts: ev.ts, summary: ev.summary ?? '', text: ev.detail })
+        }
         break
       }
 

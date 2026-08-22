@@ -18,6 +18,13 @@ export interface ToolCall {
   status: 'running' | 'ok' | 'error'
 }
 
+/** 에이전트가 실제로 한 말. 요약이 아니라 전문. */
+export interface Speech {
+  ts: number
+  summary: string
+  text: string
+}
+
 export interface LogEntry {
   ts: number
   kind: AgentEvent['type']
@@ -37,6 +44,8 @@ export interface AgentState {
   tokens?: number
   calls: ToolCall[]
   log: LogEntry[]
+  /** 이 에이전트가 남긴 발언들 (토론 백엔드에서 채워진다) */
+  speeches: Speech[]
 }
 
 /** 같은 (from, to) 쌍의 메시지는 한 엣지로 접어서 카운트만 올린다. 엣지 폭발 방지. */

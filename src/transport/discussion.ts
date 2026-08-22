@@ -144,6 +144,7 @@ export function discussionToEvents(payload: DiscussionPayload): AgentEvent[] {
       ts,
       agentId,
       summary: firstLine(m.content),
+      detail: m.content,
     })
 
     // 발언의 흐름은 **직전 발언자 → 지금 발언자**로 그린다.

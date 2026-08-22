@@ -1,10 +1,17 @@
 .panel {
-  position: relative;
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 10;
+  width: var(--panel-w, 400px);
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 0;
-  background: var(--panel);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(10px);
   border-left: 1px solid var(--line);
+  box-shadow: -18px 0 40px rgb(0 0 0 / 0.35);
   animation: panel-in 0.18s ease-out;
 }
 

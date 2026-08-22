@@ -40,22 +40,19 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: auto 1fr auto auto; /* 툴바 / 캔버스+패널 / 타임라인 / 입력 */
+  grid-template-rows: auto 1fr auto; /* 툴바 / 캔버스 / 입력 */
   height: 100%;
 }
 
 /*
- * 사이드바는 원자를 클릭했을 때만 열린다.
- * 닫혀 있으면 캔버스가 화면을 다 쓴다.
+ * 사이드바는 캔버스 **위에 얹힌다.** 열고 닫아도 캔버스 크기가 변하지 않는다.
+ * 그리드 칸으로 두면 열 때마다 WebGL 캔버스가 리사이즈되면서 화면이 통째로
+ * 흔들리는데, 대화를 옮겨 다닐 때 그게 제일 거슬린다.
  */
 .app__body {
-  display: grid;
-  grid-template-columns: 1fr;
+  position: relative;
+  display: block;
   min-height: 0;
-}
-
-.app__body[data-panel] {
-  grid-template-columns: 1fr var(--panel-w, 400px);
 }
 
 .app__canvas {
@@ -206,4 +203,50 @@ body {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 10px;
+}
+
+/* 툴바 접기 */
+.toolbar {
+  position: relative;
+  transition: padding 0.15s;
+}
+
+.toolbar.is-collapsed {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.toolbar.is-collapsed .toolbar__logo {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+
+.toolbar.is-collapsed h1 {
+  font-size: 12px;
+}
+
+.toolbar__fold {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 1;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.toolbar__fold:hover {
+  color: var(--text);
+}
+
+.toolbar.is-collapsed .toolbar__actions,
+.toolbar .toolbar__actions {
+  margin-right: 42px;
 }

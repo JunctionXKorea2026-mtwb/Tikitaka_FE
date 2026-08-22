@@ -21,8 +21,10 @@ export type AgentEvent =
       type: 'agent.thinking'
       ts: number
       agentId: string
-      /** 사고 과정 요약 한 줄 (인스펙터에 노출) */
+      /** 한 줄 요약 (노드 카드에 노출) */
       summary?: string
+      /** 발언·사고의 전문. 인스펙터에서 펼쳐 읽는다. */
+      detail?: string
     }
   | {
       type: 'tool.called'

@@ -5,7 +5,6 @@ import { SidePanel } from './features/panel/SidePanel'
 import { PromptBar } from './features/prompt/PromptBar'
 import { ResultOverlay } from './features/result/ResultOverlay'
 import { Toolbar } from './features/session/Toolbar'
-import { Timeline } from './features/timeline/Timeline'
 import { activeTurn, useRunStore } from './stores/runStore'
 import { useViewStore } from './stores/viewStore'
 
@@ -28,7 +27,7 @@ export default function App() {
     <div className="app" style={{ '--panel-w': `${panelWidth}px` } as CSSProperties}>
       <Toolbar />
 
-      <main className="app__body" data-panel={panelOpen || undefined}>
+      <main className="app__body">
         <div className="app__canvas">
           {error && <div className="banner banner--error">{error}</div>}
           <Flow3D />
@@ -38,7 +37,6 @@ export default function App() {
         {panelOpen && <SidePanel />}
       </main>
 
-      <Timeline />
       <PromptBar />
     </div>
   )

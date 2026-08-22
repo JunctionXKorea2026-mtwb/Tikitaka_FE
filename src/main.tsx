@@ -10,7 +10,6 @@ import './features/inspector/inspector.css'
 import './features/panel/panel.css'
 import './features/prompt/prompt.css'
 import './features/result/result.css'
-import './features/timeline/timeline.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

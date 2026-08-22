@@ -420,3 +420,49 @@
   font-size: 9px;
   opacity: 0.7;
 }
+
+/* 접기와 "보러 가기"를 분리한다 — 카드를 누르면 접힐 뿐 화면이 튀지 않는다 */
+.turn__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.turn__row .turn__ask {
+  flex: 1;
+  min-width: 0;
+}
+
+.turn__caret {
+  flex: none;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.turn__goto,
+.turn__here {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.turn__goto {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.turn__goto:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--running) 50%, transparent);
+}
+
+.turn__here {
+  border: 1px solid color-mix(in srgb, var(--running) 45%, transparent);
+  color: var(--running);
+}

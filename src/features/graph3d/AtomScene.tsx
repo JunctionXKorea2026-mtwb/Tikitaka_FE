@@ -379,16 +379,22 @@ function Nucleus({
       <Html position={[0, -r * 2.2, 0]} center distanceFactor={9} zIndexRange={[11, 0]}>
         <div
           className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}`}
+          title={atom.question || atom.rootLabel}
         >
-          <b>{atom.question || atom.rootLabel}</b>
-          <span>
-            {atom.rootLabel}
-            {discussionId && ` · ${discussionId.slice(0, 8)}`}
-          </span>
+          {/* 질문 전문을 띄우면 원자마다 문단이 붙어 화면이 못 읽게 된다.
+              여기서는 짧게만 — 전문은 사이드바(결과 탭)에서 읽는다. */}
+          <b>{shortTitle(atom.question || atom.rootLabel)}</b>
+          <span>{discussionId ? discussionId.slice(0, 8) : atom.rootLabel}</span>
         </div>
       </Html>
     </group>
   )
+}
+
+/** 핵에 붙일 짧은 제목. 원자가 여러 개 떠 있으므로 한 줄을 넘기면 안 된다. */
+function shortTitle(text: string, max = 16): string {
+  const line = text.trim().split('\n')[0]
+  return line.length > max ? `${line.slice(0, max)}…` : line
 }
 
 /** 격자 꼭짓점에 박힌 노드 */

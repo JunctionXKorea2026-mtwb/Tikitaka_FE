@@ -19,6 +19,13 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   const submitting = useRunStore((s) => s.submitting)
   const setResultExpanded = useViewStore((s) => s.setResultExpanded)
 
+  // 펼침은 여기서 관리한다. 카드를 누르면 접히고 펼쳐질 뿐,
+  // 캔버스가 다른 대화로 튀지 않는다 — 화면이 흔들리는 게 제일 거슬리는 동작이라
+  // "보러 가기"는 별도 버튼으로 뗐다.
+  const [openIds, setOpenIds] = useState<string[]>(() => (activeId ? [activeId] : []))
+  const toggle = (id: string) =>
+    setOpenIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
+
   if (turns.length === 0) {
     return (
       <div className="result">
@@ -41,8 +48,10 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
           index={expanded ? turns.findIndex((t) => t.id === turn.id) : i}
           active={turn.id === activeId}
           expanded={expanded}
+          open={expanded || openIds.includes(turn.id)}
           // 뿌리(새 주제)는 앞에 구분선을 둔다. 첫 턴은 빼고.
           newTopic={!expanded && turn.parentId === null && i > 0}
+          onToggle={() => toggle(turn.id)}
           onSelect={() => selectTurn(turn.id)}
           onExpand={() => setResultExpanded(true)}
         />
@@ -56,7 +65,9 @@ function TurnCard({
   index,
   active,
   expanded,
+  open,
   newTopic = false,
+  onToggle,
   onSelect,
   onExpand,
 }: {
@@ -64,7 +75,9 @@ function TurnCard({
   index: number
   active: boolean
   expanded: boolean
+  open: boolean
   newTopic?: boolean
+  onToggle: () => void
   onSelect: () => void
   onExpand: () => void
 }) {
@@ -78,16 +91,27 @@ function TurnCard({
       className={`turn${active ? ' is-active' : ''}${turn.parentId ? ' turn--child' : ''}`}
     >
       {newTopic && <div className="turn__divider">새 주제</div>}
-      <button className="turn__ask" onClick={onSelect}>
-        <span className="turn__index">{index + 1}</span>
-        <span className="turn__prompt">{turn.prompt}</span>
-      </button>
 
-      <TurnId id={turn.id} />
+      <div className="turn__row">
+        <button className="turn__ask" onClick={onToggle} aria-expanded={open}>
+          <span className="turn__caret">{open ? '▾' : '▸'}</span>
+          <span className="turn__index">{index + 1}</span>
+          <span className="turn__prompt">{turn.prompt}</span>
+        </button>
+
+        {!expanded && !active && (
+          <button className="turn__goto" onClick={onSelect} title="이 대화를 캔버스에서 보기">
+            보기
+          </button>
+        )}
+        {!expanded && active && <span className="turn__here">보는 중</span>}
+      </div>
+
+      {open && <TurnId id={turn.id} />}
 
       {/* 접힌 턴은 한 줄 요약만. 펼치면 패널이 답변으로 가득 찬다. */}
-      {!active && !expanded ? (
-        <p className="turn__folded" onClick={onSelect}>
+      {!open ? (
+        <p className="turn__folded" onClick={onToggle}>
           {done ? summarize(root?.result) : '진행 중…'}
         </p>
       ) : (
