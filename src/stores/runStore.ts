@@ -15,6 +15,12 @@ export type ConnState = 'idle' | 'connecting' | 'streaming' | 'done' | 'error'
  */
 export interface Turn {
   id: string
+  /**
+   * 이어서 물은 턴이면 그 대상, 새 주제면 null.
+   * 자동 판별하지 않는다 — 틀리면 대화가 조용히 갈라져서 더 나쁘다.
+   * 사용자가 입력창에서 고른다.
+   */
+  parentId: string | null
   prompt: string
   title: string
   events: AgentEvent[]
@@ -37,7 +43,7 @@ interface RunStore {
   cursor: number | null
   speed: number
 
-  submit: (prompt: string) => Promise<void>
+  submit: (prompt: string, options?: { newTopic?: boolean }) => Promise<void>
   /** 캔버스를 다른 턴으로 옮긴다 */
   selectTurn: (id: string) => void
   /** 활성 턴을 처음부터 다시 재생 */
@@ -61,20 +67,23 @@ export const useRunStore = create<RunStore>((set, get) => ({
   cursor: null,
   speed: 1,
 
-  async submit(prompt) {
+  async submit(prompt, options) {
     const trimmed = prompt.trim()
     if (!trimmed) return
 
     set({ submitting: true })
     try {
-      const { threadId, turns, speed } = get()
-      const runId = await createRun(trimmed, threadId, turns.length)
+      const { threadId, turns, speed, activeId } = get()
+      // 이어서 물으면 "지금 보고 있는 턴"에 붙는다 — 과거 턴을 골라두면 거기서 갈라진다
+      const parentId = options?.newTopic ? null : activeId
+      const runId = await createRun(trimmed, threadId, turns.length, parentId)
 
       // 이전 스트림은 멈춘다. 받은 이벤트는 그 턴에 그대로 남는다.
       driver?.stop()
 
       const turn: Turn = {
         id: runId,
+        parentId,
         prompt: trimmed,
         title: '',
         events: [],

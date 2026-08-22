@@ -15,6 +15,7 @@ export function PromptBar() {
   const turnCount = useRunStore((s) => s.turns.length)
 
   const [text, setText] = useState('')
+  const [newTopic, setNewTopic] = useState(false)
   const areaRef = useRef<HTMLTextAreaElement>(null)
 
   // 페이지에 들어오면 바로 입력할 수 있게
@@ -32,7 +33,7 @@ export function PromptBar() {
 
   const send = () => {
     if (!canSend) return
-    void submit(text)
+    void submit(text, { newTopic })
     setText('')
     if (areaRef.current) {
       areaRef.current.style.height = 'auto'
@@ -81,6 +82,25 @@ export function PromptBar() {
           </div>
         )}
 
+        {turnCount > 0 && (
+          <div className="prompt__mode" role="group" aria-label="질문 방식">
+            <button
+              type="button"
+              data-active={!newTopic || undefined}
+              onClick={() => setNewTopic(false)}
+            >
+              이어서 질문
+            </button>
+            <button
+              type="button"
+              data-active={newTopic || undefined}
+              onClick={() => setNewTopic(true)}
+            >
+              새 주제
+            </button>
+          </div>
+        )}
+
         <div className="prompt__field">
           <textarea
             ref={areaRef}
@@ -90,7 +110,9 @@ export function PromptBar() {
             placeholder={
               turnCount === 0
                 ? '에이전트에게 무엇을 요청할까요?'
-                : '이어서 물어보세요 — 앞 대화의 맥락이 유지됩니다'
+                : newTopic
+                  ? '새 주제로 물어보세요 — 앞 대화와 분리됩니다'
+                  : '이어서 물어보세요 — 지금 보고 있는 턴의 맥락이 이어집니다'
             }
             onChange={(e) => {
               setText(e.target.value)

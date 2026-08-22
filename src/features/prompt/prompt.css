@@ -137,3 +137,29 @@
   line-height: 1.5;
   color: var(--muted);
 }
+
+/* 이어서 질문 / 새 주제 — 자동 판별하지 않고 사용자가 고른다 */
+.prompt__mode {
+  display: inline-flex;
+  padding: 2px;
+  margin-bottom: 8px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.prompt__mode button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.prompt__mode button[data-active] {
+  background: var(--running);
+  color: #fff;
+}

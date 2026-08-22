@@ -137,3 +137,9 @@
 .nucleus__label b {
   font-size: 12.5px;
 }
+
+/* 활성 턴의 핵 라벨 — 어느 턴이 패널·타임라인과 묶여 있는지 */
+.nucleus__label.is-active {
+  border-color: color-mix(in srgb, var(--accent) 70%, transparent);
+  box-shadow: 0 0 26px color-mix(in srgb, var(--accent) 30%, transparent);
+}

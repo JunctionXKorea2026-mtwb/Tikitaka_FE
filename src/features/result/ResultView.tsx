@@ -39,6 +39,8 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
           index={expanded ? turns.findIndex((t) => t.id === turn.id) : i}
           active={turn.id === activeId}
           expanded={expanded}
+          // 뿌리(새 주제)는 앞에 구분선을 둔다. 첫 턴은 빼고.
+          newTopic={!expanded && turn.parentId === null && i > 0}
           onSelect={() => selectTurn(turn.id)}
           onExpand={() => setResultExpanded(true)}
         />
@@ -52,6 +54,7 @@ function TurnCard({
   index,
   active,
   expanded,
+  newTopic = false,
   onSelect,
   onExpand,
 }: {
@@ -59,6 +62,7 @@ function TurnCard({
   index: number
   active: boolean
   expanded: boolean
+  newTopic?: boolean
   onSelect: () => void
   onExpand: () => void
 }) {
@@ -68,7 +72,10 @@ function TurnCard({
   const failed = root?.status === 'error'
 
   return (
-    <section className={`turn${active ? ' is-active' : ''}`}>
+    <section
+      className={`turn${active ? ' is-active' : ''}${turn.parentId ? ' turn--child' : ''}`}
+    >
+      {newTopic && <div className="turn__divider">새 주제</div>}
       <button className="turn__ask" onClick={onSelect}>
         <span className="turn__index">{index + 1}</span>
         <span className="turn__prompt">{turn.prompt}</span>

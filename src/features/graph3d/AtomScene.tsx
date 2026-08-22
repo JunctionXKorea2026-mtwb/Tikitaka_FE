@@ -3,17 +3,19 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { activeTurn, useRunState, useRunStore } from '../../stores/runStore'
+import { runStateOf, useRunStore, type Turn } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 import {
   buildAtom,
   icosphere,
+  layoutTurns,
   toThree,
   type AtomModel,
   type AtomNode,
   type Link,
   type Pulse,
   type Shell,
+  type Vec3,
 } from './atom'
 
 /**
@@ -34,10 +36,6 @@ import {
 
 /** px → three 월드 단위 */
 const SCALE = 0.01
-/** 대화의 이웃 턴이 놓이는 간격 */
-const NEIGHBOR_GAP = 5.4
-/** 이웃 턴의 축소 비율 — 활성 턴이 확실히 주인공이어야 한다 */
-const NEIGHBOR_SCALE = 0.34
 
 /** 푸른 계열 팔레트. error만 계열 밖에 둔다 — 실패가 파랗게 묻히면 안 된다. */
 const COLOR: Record<string, string> = {
@@ -54,51 +52,52 @@ const colorOf = (status: string) => COLOR[status] ?? '#8ea6cc'
 const LATTICE = '#2f7fd0'
 
 export function AtomScene() {
-  const run = useRunState()
-  const question = useRunStore((s) => activeTurn(s)?.prompt ?? '')
   const turns = useRunStore((s) => s.turns)
   const activeId = useRunStore((s) => s.activeId)
   const selectTurn = useRunStore((s) => s.selectTurn)
-  const atom = useMemo(() => buildAtom(run, question), [run, question])
+
+  // 대화 전체를 한 번에 보여준다. 클릭해도 카메라를 옮기지 않는다 —
+  // 어느 턴이 패널·타임라인과 묶여 있는지만 밝기로 표시한다.
+  const molecule = useMemo(() => buildMolecule(turns), [turns])
   const [spin, setSpin] = useState(true)
 
-  const activeIndex = turns.findIndex((t) => t.id === activeId)
-
-  // 바깥 껍질이 화면을 채우도록
-  const distance = atom.extent * SCALE * 2.05
+  const distance = Math.max(6, molecule.radius * SCALE * 2.4)
 
   return (
     <div className="atom3d">
       <Canvas
         dpr={[1, 2]}
-        camera={{ position: [0, distance * 0.16, distance], fov: 45, near: 0.1, far: 120 }}
+        camera={{ position: [0, distance * 0.22, distance], fov: 45, near: 0.1, far: 400 }}
         gl={{ antialias: true }}
         onPointerMissed={() => useViewStore.getState().select(null)}
       >
         <color attach="background" args={['#03050d']} />
         <ambientLight intensity={0.45} />
-        <pointLight position={[6, 8, 6]} intensity={45} color="#bcd8ff" distance={60} />
+        <pointLight position={[6, 8, 6]} intensity={45} color="#bcd8ff" distance={120} />
 
         <Starfield />
-        <Atom atom={atom} />
 
-        {/* 대화의 다른 턴들 — 작고 어둡게 옆에 선다. 대화가 곧 분자가 된다. */}
-        {turns.map((turn, i) =>
-          turn.id === activeId ? null : (
-            <NeighborAtom
-              key={turn.id}
-              offset={(i - activeIndex) * NEIGHBOR_GAP}
-              onSelect={() => selectTurn(turn.id)}
+        {/* 주제와 주제, 질문과 후속 질문을 잇는 결합 */}
+        {molecule.bonds.map((bond) => (
+          <TurnBond key={bond.id} from={bond.from} to={bond.to} />
+        ))}
+
+        {molecule.atoms.map((item) => (
+          <group key={item.id} position={toThree(item.origin, SCALE)}>
+            <Atom
+              atom={item.atom}
+              active={item.id === activeId}
+              onSelectTurn={() => selectTurn(item.id)}
             />
-          ),
-        )}
+          </group>
+        ))}
 
         <OrbitControls
-          enablePan={false}
-          minDistance={distance * 0.3}
-          maxDistance={distance * 2.4}
+          enablePan
+          minDistance={distance * 0.15}
+          maxDistance={distance * 3}
           autoRotate={spin}
-          autoRotateSpeed={0.32}
+          autoRotateSpeed={0.3}
           rotateSpeed={0.7}
           enableDamping
           dampingFactor={0.08}
@@ -111,7 +110,7 @@ export function AtomScene() {
 
       <div className="atom3d__scan" />
       <div className="atom3d__hud">
-        <span>드래그: 회전 · 휠: 확대 · 클릭: 선택</span>
+        <span>드래그: 회전 · 휠: 확대 · 우클릭 드래그: 이동 · 클릭: 선택</span>
         <button className={spin ? 'is-on' : undefined} onClick={() => setSpin((v) => !v)}>
           자동 회전 {spin ? 'ON' : 'OFF'}
         </button>
@@ -120,7 +119,88 @@ export function AtomScene() {
   )
 }
 
-function Atom({ atom }: { atom: AtomModel }) {
+/**
+ * 대화 전체 = 분자.
+ *
+ * 턴마다 원자를 만들고 트리 배치로 자리를 잡는다.
+ * 턴의 이벤트가 늘 때만 다시 접도록 캐시한다 — 매 렌더마다 전 대화를 재계산하면 낭비다.
+ */
+interface MoleculeItem {
+  id: string
+  origin: Vec3
+  atom: AtomModel
+}
+
+interface Molecule {
+  atoms: MoleculeItem[]
+  bonds: { id: string; from: Vec3; to: Vec3 }[]
+  /** 분자 전체를 감싸는 반지름 — 카메라 거리를 정한다 */
+  radius: number
+}
+
+const atomCache = new Map<string, AtomModel>()
+
+function buildMolecule(turns: Turn[]): Molecule {
+  const placements = layoutTurns(turns.map((t) => ({ id: t.id, parentId: t.parentId })))
+  const originOf = new Map(placements.map((p) => [p.id, p.position]))
+
+  const atoms: MoleculeItem[] = []
+  for (const turn of turns) {
+    const key = `${turn.id}:${turn.events.length}`
+    let atom = atomCache.get(key)
+    if (!atom) {
+      atom = buildAtom(runStateOf(turn), turn.prompt)
+      atomCache.set(key, atom)
+      // 같은 턴의 옛 항목은 버린다 (이벤트가 늘면 키가 바뀐다)
+      for (const k of atomCache.keys()) {
+        if (k !== key && k.startsWith(`${turn.id}:`)) atomCache.delete(k)
+      }
+    }
+    atoms.push({ id: turn.id, origin: originOf.get(turn.id) ?? ORIGIN3, atom })
+  }
+
+  const bonds = placements
+    .filter((p) => p.parentId && originOf.has(p.parentId))
+    .map((p) => ({
+      id: `bond-${p.id}`,
+      from: originOf.get(p.parentId as string) as Vec3,
+      to: p.position,
+    }))
+
+  const radius = atoms.reduce(
+    (max, a) => Math.max(max, Math.hypot(a.origin.x, a.origin.z) + a.atom.extent),
+    260,
+  )
+
+  return { atoms, bonds, radius }
+}
+
+const ORIGIN3: Vec3 = { x: 0, y: 0, z: 0 }
+
+/** 질문과 후속 질문(또는 다른 주제)을 잇는 굵은 결합 */
+function TurnBond({ from, to }: { from: Vec3; to: Vec3 }) {
+  const points = useMemo(() => [toThree(from, SCALE), toThree(to, SCALE)], [from, to])
+  return (
+    <Line
+      points={points}
+      color="#4f8fd8"
+      lineWidth={1.6}
+      transparent
+      opacity={0.4}
+      toneMapped={false}
+    />
+  )
+}
+
+function Atom({
+  atom,
+  active,
+  onSelectTurn,
+}: {
+  atom: AtomModel
+  active: boolean
+  onSelectTurn: () => void
+}) {
   const select = useViewStore((s) => s.select)
   const selectedId = useViewStore((s) => s.selectedId)
   const shells = useRef<THREE.Group>(null)
@@ -135,8 +215,9 @@ function Atom({ atom }: { atom: AtomModel }) {
   return (
     <group>
       <group ref={shells}>
-        <Lattice shell={atom.shells[0]} opacity={0.22} />
-        <Lattice shell={atom.shells[1]} opacity={0.13} />
+        {/* 활성 턴만 격자를 조금 밝게 — 크기는 그대로 둔다 */}
+        <Lattice shell={atom.shells[0]} opacity={active ? 0.26 : 0.13} />
+        <Lattice shell={atom.shells[1]} opacity={active ? 0.15 : 0.075} />
 
         {/* 결합선 — 핵에서 에이전트로, 에이전트에서 도구로 */}
         {atom.links.map((link) => (
@@ -162,37 +243,13 @@ function Atom({ atom }: { atom: AtomModel }) {
       {/* 핵 = 질문. 껍질과 함께 돌지 않는다 — 중심은 고정이어야 읽힌다 */}
       <Nucleus
         atom={atom}
+        active={active}
         selected={selectedId === atom.rootId}
-        onSelect={() => select(atom.rootId)}
+        onSelect={() => {
+          onSelectTurn()
+          select(atom.rootId)
+        }}
       />
-    </group>
-  )
-}
-
-/**
- * 대화의 다른 턴. 내용은 생략하고 껍질 실루엣만 남긴다 —
- * "저기 또 하나의 질문이 있다"만 전하면 충분하고, 자세히 보려면 클릭해서 옮겨간다.
- */
-function NeighborAtom({ offset, onSelect }: { offset: number; onSelect: () => void }) {
-  return (
-    <group
-      position={[offset, 0, 0]}
-      scale={NEIGHBOR_SCALE}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect()
-      }}
-    >
-      <Lattice shell={{ radius: 330, detail: 2 }} opacity={0.16} />
-      <mesh>
-        <sphereGeometry args={[0.5, 24, 18]} />
-        <meshStandardMaterial
-          color="#ffffff"
-          emissive="#3f9dff"
-          emissiveIntensity={2.4}
-          toneMapped={false}
-        />
-      </mesh>
     </group>
   )
 }
@@ -256,10 +313,12 @@ function Lattice({ shell, opacity }: { shell: Shell; opacity: number }) {
 /** 핵 — 질문. 밝은 코어와 그것을 감싼 빛무리. */
 function Nucleus({
   atom,
+  active,
   selected,
   onSelect,
 }: {
   atom: AtomModel
+  active: boolean
   selected: boolean
   onSelect: () => void
 }) {
@@ -267,7 +326,7 @@ function Nucleus({
   const color = colorOf(atom.rootStatus)
   const busy = atom.rootStatus === 'running' || atom.rootStatus === 'thinking'
   const r = atom.nucleusRadius * SCALE
-  const base = selected ? 8 : 5
+  const base = selected ? 8 : active ? 5.5 : 3
 
   useFrame(({ clock }) => {
     if (!busy || !core.current) return
@@ -307,7 +366,9 @@ function Nucleus({
       </mesh>
 
       <Html position={[0, -r * 2.2, 0]} center distanceFactor={9} zIndexRange={[11, 0]}>
-        <div className={`orb__label nucleus__label ${atom.rootStatusClass}`}>
+        <div
+          className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}`}
+        >
           <b>{atom.question || atom.rootLabel}</b>
           <span>{atom.rootLabel}</span>
         </div>

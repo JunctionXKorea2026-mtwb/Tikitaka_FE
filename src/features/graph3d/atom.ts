@@ -78,8 +78,8 @@ export interface AtomModel {
 
 /** 안쪽 오비탈 = 에이전트, 바깥 오비탈 = 도구 */
 const SHELLS: [Shell, Shell] = [
-  { radius: 215, detail: 2 },
-  { radius: 330, detail: 3 },
+  { radius: 150, detail: 2 },
+  { radius: 235, detail: 3 },
 ]
 
 const ORIGIN: Vec3 = { x: 0, y: 0, z: 0 }
@@ -352,3 +352,93 @@ function normalize(v: Vec3): Vec3 {
  * three는 월드 단위에 y가 위로 증가하므로 줄이고 뒤집는다.
  */
 export const toThree = (v: Vec3, s: number): [number, number, number] => [v.x * s, -v.y * s, v.z * s]
+
+
+// ------------------------------------------------------------------ 대화 배치
+
+/** 원자 사이 간격. 바깥 껍질 지름(470px)보다 넉넉해야 겹치지 않는다. */
+export const TURN_GAP_X = 620
+export const TURN_GAP_Z = 560
+
+export interface TurnNode {
+  id: string
+  parentId: string | null
+}
+
+export interface TurnPlacement {
+  id: string
+  parentId: string | null
+  position: Vec3
+  depth: number
+}
+
+/**
+ * 대화를 3D 공간에 배치한다.
+ *
+ * 턴은 사슬이 아니라 **숲**이다 — 후속 질문은 부모를 갖고, 새 주제는 뿌리가 된다.
+ * 그래서 배치도 트리 레이아웃이어야 한다.
+ *
+ *   x = 깊이        이어서 물을수록 오른쪽으로 뻗는다
+ *   z = 레인        가지와 다른 주제는 안쪽/바깥쪽으로 갈라진다
+ *
+ * 레인은 후위 순회로 정한다. 잎이 차례로 레인을 하나씩 가져가고,
+ * 부모는 자식들의 평균에 놓인다 (고전적인 tidy tree의 축소판).
+ */
+export function layoutTurns(turns: TurnNode[]): TurnPlacement[] {
+  if (turns.length === 0) return []
+
+  const byId = new Map(turns.map((t) => [t.id, t]))
+  const children = new Map<string, string[]>()
+  const roots: string[] = []
+
+  for (const turn of turns) {
+    // 부모가 목록에 없으면 뿌리로 취급한다 (지워진 턴을 가리키는 경우)
+    if (turn.parentId && byId.has(turn.parentId)) {
+      const list = children.get(turn.parentId) ?? []
+      list.push(turn.id)
+      children.set(turn.parentId, list)
+    } else {
+      roots.push(turn.id)
+    }
+  }
+
+  const lane = new Map<string, number>()
+  const depth = new Map<string, number>()
+  let nextLane = 0
+
+  const walk = (id: string, d: number): number => {
+    depth.set(id, d)
+    const kids = children.get(id) ?? []
+
+    if (kids.length === 0) {
+      const own = nextLane
+      nextLane += 1
+      lane.set(id, own)
+      return own
+    }
+
+    const kidLanes = kids.map((kid) => walk(kid, d + 1))
+    const mean = kidLanes.reduce((a, b) => a + b, 0) / kidLanes.length
+    lane.set(id, mean)
+    return mean
+  }
+
+  for (const root of roots) walk(root, 0)
+
+  // 레인 전체를 0 기준으로 가운데 정렬한다
+  const lanes = [...lane.values()]
+  const center = (Math.min(...lanes) + Math.max(...lanes)) / 2
+  const depths = [...depth.values()]
+  const centerDepth = (Math.min(...depths) + Math.max(...depths)) / 2
+
+  return turns.map((turn) => ({
+    id: turn.id,
+    parentId: byId.has(turn.parentId ?? '') ? turn.parentId : null,
+    depth: depth.get(turn.id) ?? 0,
+    position: {
+      x: ((depth.get(turn.id) ?? 0) - centerDepth) * TURN_GAP_X,
+      y: 0,
+      z: ((lane.get(turn.id) ?? 0) - center) * TURN_GAP_Z,
+    },
+  }))
+}
