@@ -1,21 +1,22 @@
 import { Html, Line, OrbitControls } from '@react-three/drei'
 import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useRunState } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
-import { buildAtom, ringPoints, solvePositions, toThree, type AtomModel, type Body } from './atom'
+import { buildAtom, toThree, type AtomModel, type Body, type Pulse, type Spoke } from './atom'
 
 /**
- * 3D 홀로그램 뷰 — three.js로 그리는 진짜 구체.
+ * 3D 홀로그램 뷰 — three.js로 그리는 방사형 구조.
  *
- * CSS 그라디언트로는 아무리 겹쳐도 결국 스프라이트라 납작하다. 여기서는
- * SphereGeometry에 발광 재질을 입히고 Bloom을 걸어 광원처럼 타오르게 한다.
+ * 물체는 **움직이지 않는다.** 각자 공전하면 눈이 쉴 곳이 없어 오히려 안 읽힌다.
+ * 움직이는 것은 둘뿐이고 각각 이유가 있다.
+ *   - 카메라의 느린 자동 회전 (입체감을 주기 위해, 끌 수 있다)
+ *   - 메시지 스파크 (지금 무엇이 오가는지 알려준다)
  *
- * 원자 모형과 궤도 수학(atom.ts)은 렌더러와 무관하게 짜여 있어 그대로 쓴다.
- * 좌표계만 맞춘다: 화면 px 단위를 three 단위로 줄이고(SCALE), CSS의 y-down을
- * three의 y-up으로 뒤집는다.
+ * 모형과 배치(atom.ts)는 렌더러와 무관하다. 좌표계만 맞춘다:
+ * px 단위를 three 단위로 줄이고(SCALE), CSS의 y-down을 three의 y-up으로 뒤집는다.
  */
 
 /** px → three 월드 단위 */
@@ -37,87 +38,72 @@ const NEUTRON = '#93a9c9'
 export function AtomScene() {
   const run = useRunState()
   const atom = useMemo(() => buildAtom(run), [run])
+  const [spin, setSpin] = useState(true)
+
+  // 그래프가 커지면 카메라를 뒤로 물린다
+  const distance = Math.max(5.5, atom.extent * SCALE * 2.1)
 
   return (
     <div className="atom3d">
       <Canvas
         dpr={[1, 2]}
-        camera={{ position: [0, 2.2, 7.5], fov: 45, near: 0.1, far: 100 }}
+        camera={{ position: [0, distance * 0.3, distance], fov: 45, near: 0.1, far: 120 }}
         gl={{ antialias: true }}
         onPointerMissed={() => useViewStore.getState().select(null)}
       >
         <color attach="background" args={['#03050d']} />
-        <fog attach="fog" args={['#03050d', 9, 22]} />
+        <fog attach="fog" args={['#03050d', distance * 1.4, distance * 3.4]} />
 
         {/* 발광 재질이 주역이지만, 약한 조명이 있어야 구체의 실루엣이 산다 */}
-        <ambientLight intensity={0.35} />
-        <pointLight position={[6, 8, 6]} intensity={45} color="#bcd8ff" distance={40} />
+        <ambientLight intensity={0.4} />
+        <pointLight position={[6, 8, 6]} intensity={50} color="#bcd8ff" distance={60} />
 
         <Starfield />
         <Atom atom={atom} />
 
         <OrbitControls
           enablePan={false}
-          minDistance={3}
-          maxDistance={18}
-          autoRotate
-          autoRotateSpeed={0.45}
+          minDistance={distance * 0.4}
+          maxDistance={distance * 2.6}
+          autoRotate={spin}
+          autoRotateSpeed={0.35}
           rotateSpeed={0.7}
           enableDamping
-          dampingFactor={0.06}
+          dampingFactor={0.08}
         />
 
         <EffectComposer>
-          <Bloom intensity={1.5} luminanceThreshold={0.18} luminanceSmoothing={0.5} mipmapBlur />
+          <Bloom intensity={1.35} luminanceThreshold={0.2} luminanceSmoothing={0.5} mipmapBlur />
         </EffectComposer>
       </Canvas>
 
       <div className="atom3d__scan" />
       <div className="atom3d__hud">
         <span>드래그: 회전 · 휠: 확대 · 클릭: 선택</span>
+        <button className={spin ? 'is-on' : undefined} onClick={() => setSpin((v) => !v)}>
+          자동 회전 {spin ? 'ON' : 'OFF'}
+        </button>
       </div>
     </div>
   )
 }
 
-/** 원자 전체. 위치 갱신은 useFrame 안에서 ref로만 한다 (React 재렌더 없음). */
 function Atom({ atom }: { atom: AtomModel }) {
   const select = useViewStore((s) => s.select)
   const selectedId = useViewStore((s) => s.selectedId)
 
-  const orbRefs = useRef(new Map<string, THREE.Group>())
-  const ringRefs = useRef(new Map<string, THREE.Group>())
-  const pulseRefs = useRef(new Map<string, THREE.Line>())
-
-  useFrame(({ clock }) => {
-    const positions = solvePositions(atom.bodies, clock.elapsedTime)
-
-    for (const body of atom.bodies) {
-      const p = positions.get(body.id)
-      if (!p) continue
-      const orb = orbRefs.current.get(body.id)
-      if (orb) orb.position.set(...toThree(p, SCALE))
-
-      // 궤도선은 부모를 따라다닌다 (도구 위성은 움직이는 에이전트를 공전한다)
-      const parent = positions.get(body.parentId ?? '@nucleus')
-      const ring = ringRefs.current.get(body.id)
-      if (ring && parent) ring.position.set(...toThree(parent, SCALE))
-    }
-
-    for (const pulse of atom.pulses) {
-      const line = pulseRefs.current.get(pulse.id)
-      const a = positions.get(pulse.from)
-      const b = positions.get(pulse.to)
-      if (!line || !a || !b) continue
-      const attr = line.geometry.getAttribute('position') as THREE.BufferAttribute
-      attr.setXYZ(0, ...toThree(a, SCALE))
-      attr.setXYZ(1, ...toThree(b, SCALE))
-      attr.needsUpdate = true
-    }
-  })
-
   return (
     <group>
+      {/* 스포크 — 부모-자식 연결. 방사 구조를 눈에 보이게 한다 */}
+      {atom.spokes.map((spoke) => (
+        <SpokeLine key={spoke.id} spoke={spoke} />
+      ))}
+
+      {/* 에너지선 (에이전트 간 메시지) */}
+      {atom.pulses.map((pulse) => (
+        <PulseLine key={pulse.id} pulse={pulse} />
+      ))}
+
       {/* 핵 */}
       <group
         onClick={(e) => {
@@ -128,96 +114,75 @@ function Atom({ atom }: { atom: AtomModel }) {
         {atom.nucleons.map((n, i) => (
           <Sphere
             key={i}
-            position={toThree(n, SCALE)}
+            position={toThree(n.position, SCALE)}
             radius={(n.kind === 'proton' ? 9 : 7.5) * SCALE}
-            color={n.kind === 'proton' ? colorOf(statusOf(atom.rootStatusClass)) : NEUTRON}
+            color={n.kind === 'proton' ? colorOf(atom.rootStatus) : NEUTRON}
             intensity={n.kind === 'proton' ? 2.6 : 1.1}
           />
         ))}
         {atom.rootId && (
           <Html
-            position={[0, -(atom.nucleusRadius + 34) * SCALE, 0]}
+            position={[0, -(atom.nucleusRadius + 40) * SCALE, 0]}
             center
-            distanceFactor={9}
+            distanceFactor={10}
             zIndexRange={[10, 0]}
           >
-              <div className={`orb__label nucleus__label ${atom.rootStatusClass}`}>
-                <b>{atom.rootLabel}</b>
-                <span>
-                  {atom.nucleons.filter((n) => n.kind === 'proton').length}p ·{' '}
-                  {atom.nucleons.filter((n) => n.kind === 'neutron').length}n
-                </span>
-              </div>
+            <div className={`orb__label nucleus__label ${atom.rootStatusClass}`}>
+              <b>{atom.rootLabel}</b>
+              <span>
+                {atom.nucleons.filter((n) => n.kind === 'proton').length}p ·{' '}
+                {atom.nucleons.filter((n) => n.kind === 'neutron').length}n
+              </span>
+            </div>
           </Html>
         )}
       </group>
 
-      {/* 궤도선 */}
+      {/* 에이전트와 도구 */}
       {atom.bodies.map((body) => (
-        <group
-          key={`ring-${body.id}`}
-          ref={(el) => {
-            if (el) ringRefs.current.set(body.id, el)
-            else ringRefs.current.delete(body.id)
-          }}
-        >
-          <OrbitRing body={body} />
-        </group>
-      ))}
-
-      {/* 에너지선 (메시지) */}
-      {atom.pulses.map((pulse) => (
-        <PulseLine
-          key={pulse.id}
-          active={pulse.active}
-          register={(el) => {
-            if (el) pulseRefs.current.set(pulse.id, el)
-            else pulseRefs.current.delete(pulse.id)
-          }}
+        <BodyNode
+          key={body.id}
+          body={body}
+          selected={selectedId === body.id}
+          onSelect={() => select(body.kind === 'agent' ? body.id : null)}
         />
       ))}
+    </group>
+  )
+}
 
-      {/* 전자와 위성 */}
-      {atom.bodies.map((body) => {
-        const isAgent = body.kind === 'agent'
-        const color = colorOf(String(body.status))
-        const selected = selectedId === body.id
+function BodyNode({
+  body,
+  selected,
+  onSelect,
+}: {
+  body: Body
+  selected: boolean
+  onSelect: () => void
+}) {
+  const isAgent = body.kind === 'agent'
+  const busy = body.status === 'running' || body.status === 'thinking' || body.status === 'calling'
 
-        return (
-          <group
-            key={body.id}
-            ref={(el) => {
-              if (el) orbRefs.current.set(body.id, el)
-              else orbRefs.current.delete(body.id)
-            }}
-            onClick={(e) => {
-              e.stopPropagation()
-              select(isAgent ? body.id : null)
-            }}
-          >
-            <Sphere
-              radius={(isAgent ? 17 : 9) * SCALE}
-              color={color}
-              intensity={selected ? 6 : isAgent ? 3.4 : 2.2}
-              pulse={
-                body.status === 'running' ||
-                body.status === 'thinking' ||
-                body.status === 'calling'
-              }
-            />
-            <Html
-              position={[isAgent ? 0.26 : 0.16, 0.06, 0]}
-              distanceFactor={9}
-              zIndexRange={[9, 0]}
-            >
-              <div className={`orb__label ${body.statusClass} orb--${body.kind}-label`}>
-                <b>{body.label}</b>
-                {isAgent && <span>{body.status}</span>}
-              </div>
-            </Html>
-          </group>
-        )
-      })}
+  return (
+    <group
+      position={toThree(body.position, SCALE)}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect()
+      }}
+    >
+      <Sphere
+        radius={(isAgent ? 18 : 9) * SCALE}
+        color={colorOf(String(body.status))}
+        intensity={selected ? 6 : isAgent ? 3.4 : 2.2}
+        pulse={busy}
+      />
+      <Html position={[isAgent ? 0.28 : 0.17, 0.07, 0]} distanceFactor={10} zIndexRange={[9, 0]}>
+        <div className={`orb__label ${body.statusClass} orb--${body.kind}-label`}>
+          <b>{body.label}</b>
+          {isAgent && <span>{body.status}</span>}
+        </div>
+      </Html>
     </group>
   )
 }
@@ -240,9 +205,8 @@ function Sphere({
 
   useFrame(({ clock }) => {
     if (!pulse || !material.current) return
-    // 실행 중인 것만 맥동한다 — 멈춘 것과 구분된다
-    material.current.emissiveIntensity =
-      intensity * (0.75 + 0.35 * Math.sin(clock.elapsedTime * 4))
+    // 실행 중인 것만 숨쉰다 — 멈춘 것과 구분되고, 자리는 그대로라 산만하지 않다
+    material.current.emissiveIntensity = intensity * (0.78 + 0.3 * Math.sin(clock.elapsedTime * 3))
   })
 
   return (
@@ -261,23 +225,22 @@ function Sphere({
   )
 }
 
-/**
- * 궤도선. atom.ts의 solvePositions와 같은 회전을 three 좌표계로 옮긴 것이다.
- *   수평 원(XZ) → rotateX(tilt) → rotateY(ringYaw)
- * CSS의 y-down을 뒤집었으므로 tilt의 부호도 뒤집는다.
- */
-function OrbitRing({ body }: { body: Body }) {
-  const points = useMemo(() => ringPoints(body, SCALE), [body])
+/** 부모에서 자식으로 뻗는 선. 위치가 고정이라 한 번만 만든다. */
+function SpokeLine({ spoke }: { spoke: Spoke }) {
+  const points = useMemo(
+    () => [toThree(spoke.from, SCALE), toThree(spoke.to, SCALE)],
+    [spoke.from, spoke.to],
+  )
 
   return (
     <Line
       points={points}
-      color={colorOf(String(body.status))}
-      lineWidth={body.kind === 'agent' ? 1.1 : 0.8}
+      color={colorOf(spoke.status)}
+      lineWidth={spoke.kind === 'agent' ? 1.2 : 0.8}
       transparent
-      opacity={body.kind === 'agent' ? 0.26 : 0.15}
-      dashed={body.kind === 'tool'}
-      dashSize={0.05}
+      opacity={spoke.kind === 'agent' ? 0.3 : 0.16}
+      dashed={spoke.kind === 'tool'}
+      dashSize={0.06}
       gapSize={0.05}
       toneMapped={false}
     />
@@ -285,41 +248,47 @@ function OrbitRing({ body }: { body: Body }) {
 }
 
 /**
- * 두 점을 잇는 선. 끝점은 매 프레임 갱신되므로 자리만 잡아 둔다.
- *
- * 객체를 렌더마다 새로 만들면 GPU 자원이 계속 재생성되므로 useMemo로 고정한다.
- * 끝점이 움직여 바운딩 구가 매 프레임 어긋나므로 컬링은 끈다.
+ * 에이전트 간 메시지. 선은 고정이고, 활성일 때만 스파크가 지나간다.
+ * 이 움직임은 "지금 무엇이 오가는지"를 알려주므로 남겨 둔다.
  */
-function PulseLine({
-  active,
-  register,
-}: {
-  active: boolean
-  register: (el: THREE.Line | null) => void
-}) {
-  const line = useMemo(() => {
-    const geometry = new THREE.BufferGeometry()
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3))
-    const l = new THREE.Line(geometry, new THREE.LineBasicMaterial({ transparent: true }))
-    l.frustumCulled = false
-    return l
-  }, [])
+function PulseLine({ pulse }: { pulse: Pulse }) {
+  const spark = useRef<THREE.Mesh>(null)
+  const a = useMemo(() => toThree(pulse.from, SCALE), [pulse.from])
+  const b = useMemo(() => toThree(pulse.to, SCALE), [pulse.to])
 
-  useEffect(() => {
-    const material = line.material as THREE.LineBasicMaterial
-    material.color.set(active ? '#6fb6ff' : '#38507a')
-    material.opacity = active ? 0.95 : 0.22
-    material.toneMapped = false
-  }, [line, active])
+  useFrame(({ clock }) => {
+    if (!spark.current) return
+    const t = (clock.elapsedTime % 1.4) / 1.4
+    spark.current.position.set(
+      a[0] + (b[0] - a[0]) * t,
+      a[1] + (b[1] - a[1]) * t,
+      a[2] + (b[2] - a[2]) * t,
+    )
+  })
 
-  useEffect(() => {
-    return () => {
-      line.geometry.dispose()
-      ;(line.material as THREE.Material).dispose()
-    }
-  }, [line])
-
-  return <primitive object={line} ref={register} />
+  return (
+    <group>
+      <Line
+        points={[a, b]}
+        color={pulse.active ? '#6fb6ff' : '#38507a'}
+        lineWidth={pulse.active ? 1.6 : 0.7}
+        transparent
+        opacity={pulse.active ? 0.85 : 0.14}
+        toneMapped={false}
+      />
+      {pulse.active && (
+        <mesh ref={spark}>
+          <sphereGeometry args={[0.035, 16, 12]} />
+          <meshStandardMaterial
+            color="#ffffff"
+            emissive="#9fd0ff"
+            emissiveIntensity={7}
+            toneMapped={false}
+          />
+        </mesh>
+      )}
+    </group>
+  )
 }
 
 /** 배경 별. Points 하나로 1500개를 찍는다. */
@@ -337,7 +306,7 @@ function Starfield() {
       // 구껍질에 고르게 뿌린다 — 뭉치지 않는다
       const theta = rand() * Math.PI * 2
       const phi = Math.acos(rand() * 2 - 1)
-      const r = 26 + rand() * 20
+      const r = 30 + rand() * 24
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
       positions[i * 3 + 1] = r * Math.cos(phi)
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta)
@@ -348,6 +317,8 @@ function Starfield() {
     return g
   }, [])
 
+  useEffect(() => () => geometry.dispose(), [geometry])
+
   return (
     <points geometry={geometry}>
       <pointsMaterial
@@ -355,11 +326,9 @@ function Starfield() {
         color="#c8dcff"
         sizeAttenuation
         transparent
-        opacity={0.75}
+        opacity={0.7}
         toneMapped={false}
       />
     </points>
   )
 }
-
-const statusOf = (statusClass: string) => statusClass.replace(/^(status|tool)-/, '')
