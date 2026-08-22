@@ -269,35 +269,60 @@ export function runStateOf(turn: Turn): RunState {
   return reduceEvents(turn.id, turn.events)
 }
 
+/** 대화 목록 한 줄. 번호와 깊이가 구조를 말한다. */
+export interface ArrangedTurn {
+  turn: Turn
+  /** 1, 2, 2-1 … */
+  number: string
+  /** 들여쓰기 단계 */
+  depth: number
+}
+
 /**
- * 대화 목록에 붙일 번호.
+ * 대화를 트리 순서로 늘어놓는다.
  *
- * 뿌리(새 주제)는 1, 2, 3…
- * 이어서 물은 턴은 부모 번호에 이어 붙인다 — 2의 첫 후속 질문은 2-1, 그다음은 2-2.
- * 더 깊이 들어가면 2-1-1 처럼 계속 이어진다.
+ * 만들어진 순서 그대로 두면 후속 질문이 부모와 떨어진다 —
+ * 1 → 1-1 → 2 → 1-2 로 물으면 1-2가 목록 맨 끝에 가버린다.
+ * 그래서 깊이 우선으로 훑어 **후속 질문이 항상 부모 바로 아래** 오게 한다.
  *
- * 구분선 대신 번호가 구조를 말하게 한다. 목록은 만들어진 순서 그대로 둔다.
+ * 뿌리끼리, 형제끼리는 만들어진 순서를 지킨다.
+ * 부모가 목록에 없으면 (지워졌다면) 뿌리로 취급한다.
  */
-export function turnNumbers(turns: Turn[]): Map<string, string> {
+export function arrangeTurns(turns: Turn[]): ArrangedTurn[] {
   const known = new Set(turns.map((t) => t.id))
-  const childCount = new Map<string, number>()
-  const numbers = new Map<string, string>()
-  let rootCount = 0
+  const children = new Map<string, Turn[]>()
+  const roots: Turn[] = []
 
   for (const turn of turns) {
-    // 부모가 목록에 없으면 (지워졌다면) 뿌리로 취급한다
     const parentId = turn.parentId && known.has(turn.parentId) ? turn.parentId : null
-
-    if (!parentId) {
-      rootCount += 1
-      numbers.set(turn.id, String(rootCount))
-      continue
+    if (parentId) {
+      const list = children.get(parentId) ?? []
+      list.push(turn)
+      children.set(parentId, list)
+    } else {
+      roots.push(turn)
     }
-
-    const n = (childCount.get(parentId) ?? 0) + 1
-    childCount.set(parentId, n)
-    numbers.set(turn.id, `${numbers.get(parentId) ?? '?'}-${n}`)
   }
 
-  return numbers
+  const out: ArrangedTurn[] = []
+  // 부모를 자기 조상으로 두는 고리가 생겨도 멈추도록
+  const seen = new Set<string>()
+
+  const walk = (turn: Turn, number: string, depth: number) => {
+    if (seen.has(turn.id)) return
+    seen.add(turn.id)
+    out.push({ turn, number, depth })
+    ;(children.get(turn.id) ?? []).forEach((child, i) => {
+      walk(child, `${number}-${i + 1}`, depth + 1)
+    })
+  }
+
+  roots.forEach((root, i) => walk(root, String(i + 1), 0))
+
+  // 고리 때문에 빠진 턴이 있으면 뒤에 붙여 잃지 않는다
+  for (const turn of turns) {
+    if (!seen.has(turn.id)) out.push({ turn, number: '?', depth: 0 })
+  }
+
+  return out
 }

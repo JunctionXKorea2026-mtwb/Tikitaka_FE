@@ -346,8 +346,8 @@
 }
 
 /* 후속 질문은 살짝 들여써서 사슬임을 보인다 */
+/* 들여쓰기 폭은 깊이에 따라 인라인으로 준다 */
 .turn--child {
-  margin-left: 10px;
   border-left: 1px solid var(--line);
   border-radius: 0 10px 10px 0;
 }

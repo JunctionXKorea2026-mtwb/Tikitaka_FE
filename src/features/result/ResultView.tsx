@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { rootAgent, runTotals, type RunState } from '../../entities/run'
-import { runStateOf, turnNumbers, useRunStore, type Turn } from '../../stores/runStore'
+import { arrangeTurns, runStateOf, useRunStore, type Turn } from '../../stores/runStore'
 import { isLiveBackend } from '../../transport'
 import { useViewStore } from '../../stores/viewStore'
 
@@ -23,7 +23,8 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   // 캔버스가 다른 대화로 튀지 않는다 — 화면이 흔들리는 게 제일 거슬리는 동작이라
   // "보러 가기"는 별도 버튼으로 뗐다.
   const [openIds, setOpenIds] = useState<string[]>(() => (activeId ? [activeId] : []))
-  const numbers = turnNumbers(turns)
+  // 만들어진 순서가 아니라 트리 순서 — 후속 질문은 부모 바로 아래 온다
+  const arranged = arrangeTurns(turns)
   const toggle = (id: string) =>
     setOpenIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]))
 
@@ -38,15 +39,16 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   }
 
   // 확대 보기에서는 활성 턴 하나만 크게
-  const list = expanded ? turns.filter((t) => t.id === activeId) : turns
+  const list = expanded ? arranged.filter((a) => a.turn.id === activeId) : arranged
 
   return (
     <div className={`result${expanded ? ' result--expanded' : ''}`}>
-      {list.map((turn, i) => (
+      {list.map(({ turn, number, depth }) => (
         <TurnCard
           key={turn.id}
           turn={turn}
-          number={numbers.get(turn.id) ?? String(i + 1)}
+          number={number}
+          depth={expanded ? 0 : depth}
           active={turn.id === activeId}
           expanded={expanded}
           open={expanded || openIds.includes(turn.id)}
@@ -62,6 +64,7 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
 function TurnCard({
   turn,
   number,
+  depth,
   active,
   expanded,
   open,
@@ -72,6 +75,8 @@ function TurnCard({
   turn: Turn
   /** 1, 2, 2-1 … 번호가 대화 구조를 말한다 */
   number: string
+  /** 들여쓰기 단계 */
+  depth: number
   active: boolean
   expanded: boolean
   open: boolean
@@ -86,7 +91,8 @@ function TurnCard({
 
   return (
     <section
-      className={`turn${active ? ' is-active' : ''}${turn.parentId ? ' turn--child' : ''}`}
+      className={`turn${active ? ' is-active' : ''}${depth > 0 ? ' turn--child' : ''}`}
+      style={{ marginLeft: depth * 12 }}
     >
       <div className="turn__row">
         <button className="turn__ask" onClick={onToggle} aria-expanded={open}>
