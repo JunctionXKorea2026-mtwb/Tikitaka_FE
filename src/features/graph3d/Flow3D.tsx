@@ -2,21 +2,32 @@ import { useCallback, useEffect, useRef } from 'react'
 import { useViewStore } from '../../stores/viewStore'
 import type { AgentNodeData, ToolNodeData } from '../graph/derive'
 import { useFlowGraph } from '../graph/useFlowGraph'
+import { css, hexToRgb, mix, shade, type RGB } from './paint'
 import {
   centroid,
   clampPitch,
   fitDistance,
   project,
   type Camera,
+  type Point3,
   type Projected,
 } from './projection'
-import { buildScene, STATUS_COLOR, TOOL_COLOR, type SceneEdge, type SceneNode } from './scene'
+import {
+  BOX_SIZE,
+  boxFaces,
+  buildScene,
+  FACE_LIGHT,
+  GROUND_Y,
+  STATUS_COLOR,
+  TOOL_COLOR,
+  type SceneEdge,
+  type SceneNode,
+} from './scene'
 
 const BG = '#0a0a0e'
-const PANEL = '#14141b'
-const LINE = '#3a3a46'
+const PANEL: RGB = [22, 22, 30]
 const MUTED = '#8b8b9c'
-const TEXT = '#e7e7ee'
+const TEXT = '#f2f2f7'
 
 /** 궤도 회전 · 휠 줌 · 클릭 선택이 되는 3D 뷰. 2D와 같은 레이아웃 좌표를 공유한다. */
 export function Flow3D() {
@@ -27,7 +38,7 @@ export function Flow3D() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const camRef = useRef<Camera>({
     yaw: -0.62,
-    pitch: 0.5,
+    pitch: 0.48,
     distance: 900,
     zoom: 1,
     target: { x: 0, y: 0, z: 0 },
@@ -40,7 +51,7 @@ export function Flow3D() {
   selectedRef.current = selectedId
 
   /** 마지막 프레임의 노드 화면 좌표. 클릭 히트 테스트에 쓴다. */
-  const hitsRef = useRef<{ id: string; sx: number; sy: number; r: number }[]>([])
+  const hitsRef = useRef<Hit[]>([])
 
   // 그래프 규모가 바뀌면 카메라를 다시 맞춘다
   const fitKey = nodes.map((n) => n.id).join(',')
@@ -119,11 +130,11 @@ export function Flow3D() {
       const px = e.clientX - rect.left
       const py = e.clientY - rect.top
 
-      // 가장 가까운 노드를 고른다 (앞쪽 노드가 배열 뒤에 있으므로 역순 탐색)
+      // 앞쪽 상자가 배열 뒤에 있으므로 역순으로 훑는다
       for (let i = hitsRef.current.length - 1; i >= 0; i--) {
-        const hit = hitsRef.current[i]
-        if (Math.hypot(hit.sx - px, hit.sy - py) <= hit.r) {
-          select(hit.id.startsWith('tool:') ? null : hit.id)
+        const h = hitsRef.current[i]
+        if (px >= h.x0 && px <= h.x1 && py >= h.y0 && py <= h.y1) {
+          select(h.id.startsWith('tool:') ? null : h.id)
           return
         }
       }
@@ -156,7 +167,14 @@ export function Flow3D() {
 // ------------------------------------------------------------------ 렌더링
 
 type Scene = ReturnType<typeof buildScene>
-type Hits = React.RefObject<{ id: string; sx: number; sy: number; r: number }[]>
+interface Hit {
+  id: string
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+type HitsRef = React.RefObject<Hit[]>
 
 function draw(
   ctx: CanvasRenderingContext2D,
@@ -166,7 +184,7 @@ function draw(
   scene: Scene,
   selectedId: string | null,
   time: number,
-  hitsRef: Hits,
+  hitsRef: HitsRef,
 ) {
   ctx.fillStyle = BG
   ctx.fillRect(0, 0, width, height)
@@ -177,35 +195,36 @@ function draw(
   }
 
   drawGrid(ctx, cam, width, height, scene)
+  for (const sn of scene.nodes) drawShadow(ctx, cam, width, height, sn)
 
-  // 페인터 알고리즘: 먼 것부터 그린다. 엣지와 노드를 한 목록에 섞어 깊이로 정렬한다.
-  type Item = { depth: number; render: () => void; hit?: { id: string; sx: number; sy: number; r: number } }
+  // 페인터 알고리즘: 엣지와 상자를 한 목록에 섞어 먼 것부터 그린다.
+  interface Item {
+    depth: number
+    render: () => void
+    hit?: Hit
+  }
   const items: Item[] = []
 
   for (const edge of scene.edges) {
     const a = project(edge.from, cam, width, height)
     const b = project(edge.to, cam, width, height)
     if (!a || !b) continue
-    const depth = (a.depth + b.depth) / 2
-    items.push({ depth, render: () => drawEdge(ctx, a, b, edge, time) })
+    items.push({ depth: (a.depth + b.depth) / 2, render: () => drawEdge(ctx, a, b, edge, time) })
   }
 
   for (const sn of scene.nodes) {
-    const p = project(sn.point, cam, width, height)
-    if (!p) continue
-    const isTool = sn.node.type === 'tool'
-    const w = (isTool ? 116 : 156) * p.scale
-    const h = (isTool ? 34 : 48) * p.scale
+    const box = projectBox(sn, cam, width, height)
+    if (!box) continue
     items.push({
-      depth: p.depth,
-      render: () => drawNode(ctx, p, sn, selectedId === sn.id),
-      hit: { id: sn.id, sx: p.sx, sy: p.sy, r: Math.max(w, h) / 2 },
+      depth: box.center.depth,
+      render: () => drawBox(ctx, box, sn, selectedId === sn.id),
+      hit: { id: sn.id, x0: box.x0, y0: box.y0, x1: box.x1, y1: box.y1 },
     })
   }
 
   items.sort((a, b) => b.depth - a.depth)
 
-  const hits: { id: string; sx: number; sy: number; r: number }[] = []
+  const hits: Hit[] = []
   for (const item of items) {
     item.render()
     if (item.hit) hits.push(item.hit)
@@ -213,7 +232,182 @@ function draw(
   hitsRef.current = hits
 }
 
-/** 에이전트 평면을 나타내는 바닥 격자. 공간감의 기준점. */
+// ---- 상자 ----
+
+interface ProjectedBox {
+  /** 면마다 화면 좌표 4점 + 평균 깊이 + 광원 밝기 */
+  faces: { pts: Projected[]; depth: number; light: number }[]
+  center: Projected
+  /** 화면상 외접 사각형 — 히트 테스트용 */
+  x0: number
+  y0: number
+  x1: number
+  y1: number
+}
+
+function projectBox(
+  sn: SceneNode,
+  cam: Camera,
+  width: number,
+  height: number,
+): ProjectedBox | null {
+  const size = sn.node.type === 'tool' ? BOX_SIZE.tool : BOX_SIZE.agent
+  const center = project(sn.point, cam, width, height)
+  if (!center) return null
+
+  const faces: ProjectedBox['faces'] = []
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+
+  const quads = boxFaces(sn.point, size.w, size.h, size.d)
+  for (let i = 0; i < quads.length; i++) {
+    const pts: Projected[] = []
+    let sum = 0
+    for (const corner of quads[i]) {
+      const p = project(corner, cam, width, height)
+      if (!p) return null
+      pts.push(p)
+      sum += p.depth
+      if (p.sx < x0) x0 = p.sx
+      if (p.sx > x1) x1 = p.sx
+      if (p.sy < y0) y0 = p.sy
+      if (p.sy > y1) y1 = p.sy
+    }
+    faces.push({ pts, depth: sum / pts.length, light: FACE_LIGHT[i] })
+  }
+
+  // 상자 안에서도 먼 면부터 칠해서 가까운 면이 덮게 한다
+  faces.sort((a, b) => b.depth - a.depth)
+
+  return { faces, center, x0, y0, x1, y1 }
+}
+
+function drawBox(
+  ctx: CanvasRenderingContext2D,
+  box: ProjectedBox,
+  sn: SceneNode,
+  selected: boolean,
+) {
+  const isTool = sn.node.type === 'tool'
+  const data = sn.node.data as AgentNodeData | ToolNodeData
+  const accentHex = isTool
+    ? (TOOL_COLOR[(data as ToolNodeData).status] ?? MUTED)
+    : (STATUS_COLOR[(data as AgentNodeData).status] ?? MUTED)
+  const accent = hexToRgb(accentHex)
+
+  // 몸통은 패널색에 상태색을 살짝 섞는다. 선택되면 더 진하게.
+  const base = mix(PANEL, accent, selected ? 0.34 : isTool ? 0.14 : 0.2)
+
+  if (selected) {
+    ctx.save()
+    ctx.shadowColor = accentHex
+    ctx.shadowBlur = 22
+  }
+
+  for (const face of box.faces) {
+    ctx.beginPath()
+    ctx.moveTo(face.pts[0].sx, face.pts[0].sy)
+    for (let i = 1; i < face.pts.length; i++) ctx.lineTo(face.pts[i].sx, face.pts[i].sy)
+    ctx.closePath()
+
+    ctx.fillStyle = css(shade(base, face.light))
+    ctx.fill()
+
+    // 모서리를 상태색으로 얇게 그어 입체감을 살린다
+    ctx.strokeStyle = css(accent, selected ? 0.85 : 0.4)
+    ctx.lineWidth = Math.max(0.5, (selected ? 1.4 : 0.9) * box.center.scale)
+    ctx.stroke()
+  }
+
+  if (selected) ctx.restore()
+
+  drawLabel(ctx, box, sn, accentHex, isTool)
+}
+
+/**
+ * 라벨은 화면 정렬(빌보드)로 그린다.
+ * 원근 사각형에 텍스트를 얹으려면 호모그래피가 필요한데, 캔버스 2D는 아핀까지만 지원해서
+ * 각도가 커지면 글자가 뭉개진다. 상자는 입체로, 글자는 항상 읽히게 두는 쪽을 택했다.
+ */
+function drawLabel(
+  ctx: CanvasRenderingContext2D,
+  box: ProjectedBox,
+  sn: SceneNode,
+  accentHex: string,
+  isTool: boolean,
+) {
+  const { scale } = box.center
+  const maxWidth = (box.x1 - box.x0) * 0.86
+  if (maxWidth < 16) return
+
+  const data = sn.node.data as AgentNodeData | ToolNodeData
+  const label = isTool ? (data as ToolNodeData).name : (data as AgentNodeData).label
+
+  ctx.save()
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.shadowColor = 'rgba(0,0,0,0.85)'
+  ctx.shadowBlur = 5 * scale
+
+  const size = Math.max(8, (isTool ? 10 : 12.5) * scale)
+  ctx.font = `${isTool ? 500 : 650} ${size}px ui-sans-serif, -apple-system, system-ui, sans-serif`
+  ctx.fillStyle = isTool ? MUTED : TEXT
+  ctx.fillText(
+    ellipsis(ctx, label, maxWidth),
+    box.center.sx,
+    box.center.sy - (isTool ? 0 : 7 * scale),
+  )
+
+  if (!isTool) {
+    const agent = data as AgentNodeData
+    ctx.font = `500 ${Math.max(7, 9.5 * scale)}px ui-monospace, monospace`
+    ctx.fillStyle = accentHex
+    const sub = agent.runningTool ? `⚙ ${agent.runningTool}` : agent.status
+    ctx.fillText(ellipsis(ctx, sub, maxWidth), box.center.sx, box.center.sy + 9 * scale)
+  }
+
+  ctx.restore()
+}
+
+/** 바닥에 떨어지는 타원 그림자. 높이 차이를 읽게 해주는 가장 값싼 단서다. */
+function drawShadow(
+  ctx: CanvasRenderingContext2D,
+  cam: Camera,
+  width: number,
+  height: number,
+  sn: SceneNode,
+) {
+  const ground: Point3 = { x: sn.point.x, y: GROUND_Y, z: sn.point.z }
+  const g = project(ground, cam, width, height)
+  const top = project(sn.point, cam, width, height)
+  if (!g || !top) return
+
+  const size = sn.node.type === 'tool' ? BOX_SIZE.tool : BOX_SIZE.agent
+  const rx = (size.w / 2) * g.scale
+  const ry = (size.d / 2) * g.scale * Math.max(0.18, Math.abs(Math.sin(cam.pitch)))
+
+  ctx.save()
+  ctx.beginPath()
+  ctx.ellipse(g.sx, g.sy, Math.max(1, rx), Math.max(1, ry), 0, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(0,0,0,0.42)'
+  ctx.filter = 'blur(1px)'
+  ctx.fill()
+  ctx.restore()
+
+  // 상자에서 그림자로 내리는 실선 — 떠 있는 높이를 알려준다
+  ctx.save()
+  ctx.strokeStyle = 'rgba(150,150,190,0.16)'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(top.sx, top.sy)
+  ctx.lineTo(g.sx, g.sy)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/** 바닥 격자. 공간의 기준면. */
 function drawGrid(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
@@ -231,19 +425,19 @@ function drawGrid(
     minZ = Math.min(minZ, p.z)
     maxZ = Math.max(maxZ, p.z)
   }
-  const pad = 160
+  const pad = 170
   minX -= pad
   maxX += pad
   minZ -= pad
   maxZ += pad
 
   const step = 120
-  ctx.strokeStyle = 'rgba(120,120,150,0.10)'
+  ctx.strokeStyle = 'rgba(120,120,150,0.11)'
   ctx.lineWidth = 1
 
   const line = (x1: number, z1: number, x2: number, z2: number) => {
-    const a = project({ x: x1, y: 0, z: z1 }, cam, width, height)
-    const b = project({ x: x2, y: 0, z: z2 }, cam, width, height)
+    const a = project({ x: x1, y: GROUND_Y, z: z1 }, cam, width, height)
+    const b = project({ x: x2, y: GROUND_Y, z: z2 }, cam, width, height)
     if (!a || !b) return
     ctx.beginPath()
     ctx.moveTo(a.sx, a.sy)
@@ -267,13 +461,13 @@ function drawEdge(
   ctx.save()
   if (edge.kind === 'tool') {
     ctx.setLineDash([4 * scale, 4 * scale])
-    ctx.strokeStyle = 'rgba(140,140,170,0.35)'
+    ctx.strokeStyle = 'rgba(140,140,170,0.4)'
     ctx.lineWidth = Math.max(0.6, 1.1 * scale)
   } else if (edge.kind === 'spawn') {
-    ctx.strokeStyle = 'rgba(160,160,190,0.5)'
+    ctx.strokeStyle = 'rgba(170,170,200,0.55)'
     ctx.lineWidth = Math.max(0.8, 1.6 * scale)
   } else {
-    ctx.strokeStyle = edge.active ? '#3b82f6' : 'rgba(110,120,150,0.45)'
+    ctx.strokeStyle = edge.active ? '#3b82f6' : 'rgba(110,120,150,0.5)'
     ctx.lineWidth = Math.max(0.8, (edge.active ? 2.2 : 1.4) * scale)
   }
 
@@ -283,112 +477,23 @@ function drawEdge(
   ctx.stroke()
   ctx.restore()
 
-  // 흐르는 메시지는 선 위를 도는 점으로 보여준다 (2D의 패킷 애니메이션과 같은 규칙)
+  // 흐르는 메시지는 선 위를 도는 점으로 (2D의 패킷 애니메이션과 같은 규칙)
   if (edge.kind === 'message' && edge.active) {
-    const t = ((time % 1200) / 1200)
-    const px = a.sx + (b.sx - a.sx) * t
-    const py = a.sy + (b.sy - a.sy) * t
+    const t = (time % 1200) / 1200
     ctx.beginPath()
-    ctx.arc(px, py, Math.max(2, 3.6 * scale), 0, Math.PI * 2)
+    ctx.arc(
+      a.sx + (b.sx - a.sx) * t,
+      a.sy + (b.sy - a.sy) * t,
+      Math.max(2, 3.6 * scale),
+      0,
+      Math.PI * 2,
+    )
     ctx.fillStyle = '#3b82f6'
     ctx.shadowColor = '#3b82f6'
     ctx.shadowBlur = 10
     ctx.fill()
     ctx.shadowBlur = 0
   }
-}
-
-function drawNode(
-  ctx: CanvasRenderingContext2D,
-  p: Projected,
-  sn: SceneNode,
-  selected: boolean,
-) {
-  const isTool = sn.node.type === 'tool'
-  const w = (isTool ? 116 : 156) * p.scale
-  const h = (isTool ? 34 : 48) * p.scale
-  const r = (isTool ? 7 : 9) * p.scale
-  const x = p.sx - w / 2
-  const y = p.sy - h / 2
-
-  const data = sn.node.data as AgentNodeData | ToolNodeData
-  const accent = isTool
-    ? (TOOL_COLOR[(data as ToolNodeData).status] ?? MUTED)
-    : (STATUS_COLOR[(data as AgentNodeData).status] ?? MUTED)
-
-  // 바닥으로 내리는 기둥 — 높이 차이를 읽히게 한다
-  if (isTool) {
-    ctx.save()
-    ctx.strokeStyle = 'rgba(140,140,170,0.18)'
-    ctx.lineWidth = 1
-    ctx.beginPath()
-    ctx.moveTo(p.sx, p.sy)
-    ctx.lineTo(p.sx, p.sy - 26 * p.scale)
-    ctx.stroke()
-    ctx.restore()
-  }
-
-  ctx.save()
-  roundRect(ctx, x, y, w, h, r)
-  ctx.fillStyle = PANEL
-  ctx.fill()
-  ctx.strokeStyle = selected ? accent : LINE
-  ctx.lineWidth = selected ? 2.4 * p.scale : 1.1 * p.scale
-  if (selected) {
-    ctx.shadowColor = accent
-    ctx.shadowBlur = 14
-  }
-  ctx.stroke()
-  ctx.shadowBlur = 0
-
-  // 좌측 상태 띠
-  roundRect(ctx, x, y, Math.max(2, 3.5 * p.scale), h, r)
-  ctx.fillStyle = accent
-  ctx.fill()
-  ctx.restore()
-
-  const fontSize = Math.max(8, (isTool ? 10 : 12) * p.scale)
-  ctx.font = `${isTool ? 400 : 600} ${fontSize}px ui-sans-serif, -apple-system, system-ui, sans-serif`
-  ctx.textBaseline = 'middle'
-  ctx.fillStyle = isTool ? MUTED : TEXT
-
-  const label = isTool ? (data as ToolNodeData).name : (data as AgentNodeData).label
-  const padX = 10 * p.scale
-  ctx.fillText(
-    ellipsis(ctx, label, w - padX * 2),
-    x + padX,
-    isTool ? p.sy : p.sy - 7 * p.scale,
-  )
-
-  if (!isTool) {
-    const agent = data as AgentNodeData
-    ctx.font = `400 ${Math.max(7, 9.5 * p.scale)}px ui-monospace, monospace`
-    ctx.fillStyle = accent
-    const sub = agent.runningTool ? `⚙ ${agent.runningTool}` : agent.status
-    ctx.fillText(ellipsis(ctx, sub, w - padX * 2), x + padX, p.sy + 9 * p.scale)
-  }
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
-  r: number,
-) {
-  const radius = Math.min(r, w / 2, h / 2)
-  ctx.beginPath()
-  if (typeof ctx.roundRect === 'function') {
-    ctx.roundRect(x, y, w, h, radius)
-    return
-  }
-  ctx.moveTo(x + radius, y)
-  ctx.arcTo(x + w, y, x + w, y + h, radius)
-  ctx.arcTo(x + w, y + h, x, y + h, radius)
-  ctx.arcTo(x, y + h, x, y, radius)
-  ctx.arcTo(x, y, x + w, y, radius)
-  ctx.closePath()
 }
 
 function ellipsis(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
