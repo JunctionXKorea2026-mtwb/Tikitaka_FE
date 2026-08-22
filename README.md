@@ -92,18 +92,29 @@ src/
 계층은 좌표가 아니라 **"무엇이 무엇을 공전하는가"**로 표현된다. 그래서 2D와 달리
 ELK 좌표를 쓰지 않는다.
 
-### 별처럼 보이게 하는 것
+### 렌더링
 
-균일한 색의 원반은 아무리 칠해도 스티커처럼 보인다. 광원으로 읽히려면 세 겹이 필요하다.
+**three.js를 쓴다** (`@react-three/fiber` + `drei` + `postprocessing`).
 
-| 겹 | 역할 |
-|---|---|
-| 헤일로 | 하드 엣지 없이 넓게 감쇠 — 부피감 |
-| 회절 스파이크 | 십자 광선. "점광원"이라는 신호를 가장 강하게 준다 |
-| 코어 | 중심이 흰색이어야 빛으로 읽힌다 |
+CSS 그라디언트로 구를 흉내내는 방식은 아무리 겹쳐도 결국 스프라이트라 납작하다.
+실제 `SphereGeometry`에 발광 재질을 입히고 Bloom을 걸어야 광원처럼 타오른다.
 
-여기에 **깊이에 따른 광도**(`--lum`)를 매 프레임 준다. 가까운 광원이 더 타오른다.
-크기 변화는 CSS `perspective`가 이미 처리한다.
+- 구체 — 발광 재질(`emissiveIntensity`) + `Bloom`, 실행 중인 것만 맥동
+- 궤도선 — `ringPoints()`가 `solvePositions()`와 같은 회전을 쓴다.
+  입자가 그려진 선 위에 놓이는지 수치 검증했다 (차이는 96각형 근사분뿐)
+- 라벨 — drei `Html`. DOM이라 어느 거리에서도 선명하다
+- 별 — `Points` 하나에 1500개
+- 카메라 — `OrbitControls` (자동 회전 + 댐핑)
+
+three 일체는 **3D로 토글할 때만 내려받는다** (`Flow3D`가 lazy import).
+2D만 쓰는 사람의 초기 번들은 그대로다.
+
+```
+초기 번들      132 KB gzip
+AtomScene      277 KB gzip  ← 3D 토글 시에만
+```
+
+좌표계는 `atom.ts`의 모형(px, y-down)을 `toThree()`가 three(월드 단위, y-up)로 옮긴다.
 
 ### 팔레트
 
@@ -114,21 +125,6 @@ running #3f9dff · thinking #9fb9ff · calling #7b74ff · done #45dcff · error 
 ```
 
 `error`만 일부러 계열 밖에 뒀다 — 실패가 파랗게 묻히면 안 된다.
-나머지도 색이 정보를 나르므로 하나로 뭉뚱그리지 않고 구별 가능한 파랑들로 갈랐다.
-
-### 구현
-
-three.js를 쓰지 않는다. [100,000 Stars](https://stars.chromeexperiments.com/)도 라벨은
-CSS3D로 그리고 카메라만 맞췄으며, 그쪽이 WebGL을 쓴 이유는 별이 10만 개였기 때문이다.
-여기는 물체가 스무 개 남짓이라 CSS 3D로 충분하고, 글자가 항상 선명하다.
-
-- 위치는 매 프레임 JS가 계산해 `transform`만 직접 쓴다 (React 재렌더 없음)
-- 궤도면은 수평 원을 `rotateX(tilt)` → `rotateY(ringYaw)` 한 것이고,
-  궤도선 div는 XY평면이라 먼저 눕혀 `rotateX(90 + tilt)`가 된다.
-  입자가 그 원 위에 정확히 놓이는지 수치 검증했다 (오차 4e-14)
-- 라벨은 무대 회전의 역변환 `rotateY(-yaw) rotateX(-pitch)`를 걸어 항상 정면을 본다
-- 별 200개는 DOM 노드 **하나**에 `box-shadow` 목록으로 찍는다
-- 유휴 4초 후 자동 회전, HUD에서 끌 수 있다
 
 ## 요청과 최종 답변
 

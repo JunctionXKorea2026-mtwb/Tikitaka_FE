@@ -250,26 +250,45 @@ export function solvePositions(bodies: Body[], time: number): Map<string, Vec3> 
 }
 
 /**
- * 두 점을 잇는 막대의 CSS 변환.
- * 기본 요소는 왼쪽 끝을 원점으로 +X로 뻗어 있다.
- *   rotateY(θ) rotateZ(φ) 를 적용하면 +X가 (cosφ·cosθ, sinφ, −cosφ·sinθ)로 간다.
+ * three 좌표로의 변환.
+ *
+ * atom.ts의 모형은 화면 px 단위이고 CSS 관례대로 y가 아래로 증가한다.
+ * three는 월드 단위에 y가 위로 증가하므로 줄이고 뒤집는다.
  */
-export function segmentTransform(from: Vec3, to: Vec3): { length: number; transform: string } {
-  const dx = to.x - from.x
-  const dy = to.y - from.y
-  const dz = to.z - from.z
-  const length = Math.hypot(dx, dy, dz)
-  if (length < 0.001) {
-    return { length: 0, transform: `translate3d(${from.x}px, ${from.y}px, ${from.z}px)` }
+export const toThree = (v: Vec3, scale: number): [number, number, number] => [
+  v.x * scale,
+  -v.y * scale,
+  v.z * scale,
+]
+
+/**
+ * 궤도선을 이루는 점들 (three 좌표).
+ * solvePositions와 같은 회전을 쓴다 — 입자가 이 선 위에 정확히 놓여야 한다.
+ */
+export function ringPoints(body: Body, scale: number, segments = 96): [number, number, number][] {
+  const tilt = (body.tilt * Math.PI) / 180
+  const yaw = (body.ringYaw * Math.PI) / 180
+  const out: [number, number, number][] = []
+
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2
+    const x0 = Math.cos(a) * body.radius
+    const z0 = Math.sin(a) * body.radius
+
+    const y1 = -z0 * Math.sin(tilt)
+    const z1 = z0 * Math.cos(tilt)
+
+    out.push(
+      toThree(
+        {
+          x: x0 * Math.cos(yaw) + z1 * Math.sin(yaw),
+          y: y1,
+          z: -x0 * Math.sin(yaw) + z1 * Math.cos(yaw),
+        },
+        scale,
+      ),
+    )
   }
 
-  const yaw = Math.atan2(-dz, dx)
-  const pitch = Math.asin(Math.max(-1, Math.min(1, dy / length)))
-
-  return {
-    length,
-    transform:
-      `translate3d(${from.x}px, ${from.y}px, ${from.z}px)` +
-      ` rotateY(${yaw}rad) rotateZ(${pitch}rad)`,
-  }
+  return out
 }
