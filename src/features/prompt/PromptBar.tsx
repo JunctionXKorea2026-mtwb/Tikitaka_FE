@@ -1,10 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import {
-  isLiveBackend,
-  MAX_TOPIC_BYTES,
-  summarizeTitleFor,
-  topicBytes,
-} from '../../transport'
+import { isLiveBackend, MAX_TOPIC_BYTES, topicBytes } from '../../transport'
 import { activeTurn, useRunStore } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 
@@ -21,7 +16,6 @@ export function PromptBar() {
   const turnCount = useRunStore((s) => s.turns.length)
 
   const [text, setText] = useState('')
-  const [shortening, setShortening] = useState(false)
   const submitError = useRunStore((s) => s.submitError)
   const clearSubmitError = useRunStore((s) => s.clearSubmitError)
 
@@ -39,7 +33,7 @@ export function PromptBar() {
     areaRef.current?.focus()
   }, [])
 
-  const busy = submitting || conn === 'connecting' || shortening
+  const busy = submitting || conn === 'connecting'
   const canSend = text.trim().length > 0 && !busy && !tooLong
 
   const resize = (el: HTMLTextAreaElement) => {
@@ -159,23 +153,6 @@ export function PromptBar() {
             {tooLong
               ? `질문이 ${bytes}바이트입니다. 백엔드는 ${MAX_TOPIC_BYTES}바이트까지만 받습니다 (한글 약 341자).`
               : submitError}
-            {tooLong && (
-              <button
-                type="button"
-                className="prompt__shorten"
-                disabled={shortening}
-                onClick={() => {
-                  // 몰래 줄여서 보내지 않는다. 줄인 문장을 입력창에 넣어 확인하고 보내게 한다.
-                  setShortening(true)
-                  void summarizeTitleFor(text)
-                    .then((short) => short && setText(short))
-                    .catch(() => {})
-                    .finally(() => setShortening(false))
-                }}
-              >
-                {shortening ? '줄이는 중…' : '요약해서 줄이기'}
-              </button>
-            )}
           </p>
         )}
 
