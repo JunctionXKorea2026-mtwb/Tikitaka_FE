@@ -59,7 +59,12 @@ export type AgentEvent =
 
 export type AgentEventType = AgentEvent['type']
 
-/** mock/*.json 파일 하나의 형태. API의 `GET /runs/:id` 응답과 동일하게 맞춰둔다. */
+/**
+ * 실행 하나의 이벤트 묶음.
+ *
+ * mock 모드에서 `transport/scenario.ts`가 메모리에 만들어 쓴다.
+ * 파일로 저장하지 않는다 — 프롬프트마다 시나리오가 새로 생기기 때문이다.
+ */
 export interface RunFixture {
   runId: string
   title: string

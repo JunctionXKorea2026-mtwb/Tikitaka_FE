@@ -1,5 +1,7 @@
+import { useState } from 'react'
 import { rootAgent, runTotals, type RunState } from '../../entities/run'
 import { runStateOf, useRunStore, type Turn } from '../../stores/runStore'
+import { isLiveBackend } from '../../transport'
 import { useViewStore } from '../../stores/viewStore'
 
 /**
@@ -81,6 +83,8 @@ function TurnCard({
         <span className="turn__prompt">{turn.prompt}</span>
       </button>
 
+      <TurnId id={turn.id} />
+
       {/* 접힌 턴은 한 줄 요약만. 펼치면 패널이 답변으로 가득 찬다. */}
       {!active && !expanded ? (
         <p className="turn__folded" onClick={onSelect}>
@@ -118,6 +122,32 @@ function TurnCard({
         </>
       )}
     </section>
+  )
+}
+
+/**
+ * 실행 id. 실제 백엔드에서는 이게 discussionId라서, 서버 로그를 대조하거나
+ * API를 직접 찔러볼 때 필요하다. 클릭하면 복사된다.
+ */
+function TurnId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false)
+
+  return (
+    <button
+      className={`turn__id${copied ? ' is-copied' : ''}`}
+      title={`${id}\n(클릭하면 복사)`}
+      onClick={(e) => {
+        e.stopPropagation()
+        void navigator.clipboard.writeText(id).then(() => {
+          setCopied(true)
+          window.setTimeout(() => setCopied(false), 1400)
+        })
+      }}
+    >
+      <span className="turn__id-key">{isLiveBackend ? 'discussionId' : 'runId'}</span>
+      <code>{id}</code>
+      <span className="turn__id-copy">{copied ? '복사됨' : '⧉'}</span>
+    </button>
   )
 }
 

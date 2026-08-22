@@ -372,3 +372,51 @@
   height: 1px;
   background: var(--line);
 }
+
+/* 실행 id — 실제 백엔드에서는 discussionId. 클릭하면 복사된다. */
+.turn__id {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  max-width: 100%;
+  margin-left: 26px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+
+.turn__id:hover {
+  border-color: #3a3a46;
+  color: var(--text);
+}
+
+.turn__id.is-copied {
+  border-color: color-mix(in srgb, var(--done) 55%, transparent);
+  color: var(--done);
+}
+
+.turn__id-key {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+
+.turn__id code {
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.turn__id-copy {
+  flex: none;
+  font-size: 9px;
+  opacity: 0.7;
+}

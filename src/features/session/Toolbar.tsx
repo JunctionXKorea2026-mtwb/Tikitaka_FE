@@ -24,7 +24,18 @@ export function Toolbar() {
         <span className="toolbar__logo">◇</span>
         <div>
           <h1>Agent Flow</h1>
-          <p>{turn ? `${turnCount}개 턴 · ${turn.title || turn.prompt}` : '요청을 입력하면 실행이 시작됩니다'}</p>
+          <p>
+            {turn ? (
+              <>
+                {turnCount}개 턴 · {turn.title || turn.prompt}
+                <code className="toolbar__id" title={turn.id}>
+                  {turn.id.slice(0, 8)}
+                </code>
+              </>
+            ) : (
+              '요청을 입력하면 실행이 시작됩니다'
+            )}
+          </p>
         </div>
       </div>
 

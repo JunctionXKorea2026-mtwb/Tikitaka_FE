@@ -87,6 +87,7 @@ export function AtomScene() {
             <Atom
               atom={item.atom}
               active={item.id === activeId}
+              discussionId={item.id}
               onSelectTurn={() => selectTurn(item.id)}
             />
           </group>
@@ -195,10 +196,12 @@ function TurnBond({ from, to }: { from: Vec3; to: Vec3 }) {
 function Atom({
   atom,
   active,
+  discussionId,
   onSelectTurn,
 }: {
   atom: AtomModel
   active: boolean
+  discussionId?: string
   onSelectTurn: () => void
 }) {
   const select = useViewStore((s) => s.select)
@@ -244,6 +247,7 @@ function Atom({
       <Nucleus
         atom={atom}
         active={active}
+        discussionId={discussionId}
         selected={selectedId === atom.rootId}
         onSelect={() => {
           onSelectTurn()
@@ -315,11 +319,13 @@ function Nucleus({
   atom,
   active,
   selected,
+  discussionId,
   onSelect,
 }: {
   atom: AtomModel
   active: boolean
   selected: boolean
+  discussionId?: string
   onSelect: () => void
 }) {
   const core = useRef<THREE.MeshStandardMaterial>(null)
@@ -370,7 +376,10 @@ function Nucleus({
           className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}`}
         >
           <b>{atom.question || atom.rootLabel}</b>
-          <span>{atom.rootLabel}</span>
+          <span>
+            {atom.rootLabel}
+            {discussionId && ` · ${discussionId.slice(0, 8)}`}
+          </span>
         </div>
       </Html>
     </group>
