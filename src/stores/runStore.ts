@@ -25,6 +25,8 @@ interface RunStore {
   speed: number
 
   submit: (prompt: string) => Promise<void>
+  /** 같은 실행을 처음부터 다시 재생한다 (속도 변경·재확인용) */
+  replay: () => void
   connect: (runId: string, prompt?: string) => void
   disconnect: () => void
   setCursor: (cursor: number | null) => void
@@ -56,6 +58,11 @@ export const useRunStore = create<RunStore>((set, get) => ({
     } finally {
       set({ submitting: false })
     }
+  },
+
+  replay() {
+    const { runId, prompt } = get()
+    if (runId) get().connect(runId, prompt)
   },
 
   connect(runId, prompt = '') {

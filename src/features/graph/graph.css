@@ -200,8 +200,43 @@
   fill: var(--text);
 }
 
-.react-flow__minimap {
-  background: var(--panel);
+/* ---------- 빈 캔버스 안내 ---------- */
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.canvas-empty__mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 20px;
+}
+
+.canvas-empty h2 {
+  margin: 6px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.canvas-empty p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
 }

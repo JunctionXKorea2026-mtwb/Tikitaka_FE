@@ -2,7 +2,6 @@ import {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   ReactFlow,
   type NodeChange,
   type NodeMouseHandler,
@@ -12,14 +11,6 @@ import { useViewStore } from '../../stores/viewStore'
 import { edgeTypes } from './edges'
 import { nodeTypes } from './nodes'
 import { useFlowGraph } from './useFlowGraph'
-
-const MINIMAP_COLOR: Record<string, string> = {
-  running: '#3b82f6',
-  thinking: '#f59e0b',
-  calling: '#a855f7',
-  done: '#22c55e',
-  error: '#ef4444',
-}
 
 export function FlowCanvas() {
   const { nodes, edges } = useFlowGraph()
@@ -64,12 +55,6 @@ export function FlowCanvas() {
     >
       <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#26262e" />
       <Controls showInteractive={false} />
-      <MiniMap
-        pannable
-        zoomable
-        nodeColor={(n) => MINIMAP_COLOR[String(n.data?.status ?? '')] ?? '#4b5563'}
-        maskColor="rgba(10,10,14,0.7)"
-      />
     </ReactFlow>
   )
 }

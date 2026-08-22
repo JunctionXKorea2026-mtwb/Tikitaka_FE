@@ -3,7 +3,8 @@
 > `mockup` 브랜치. 실제 프론트엔드는 `main`에서 작업한다.
 
 React Flow로 멀티 에이전트 실행을 실시간 시각화하는 대시보드.
-현재는 백엔드 없이 `public/mock/*.json`을 리플레이하고, **환경변수 한 줄로 실제 API로 전환**된다.
+백엔드 없이 **입력한 요청에서 실행 시나리오를 생성해** 실시간 스트림처럼 재생하고,
+**환경변수 한 줄로 실제 API로 전환**된다.
 
 ```bash
 npm install
@@ -13,7 +14,7 @@ npm run dev
 ## 데이터 흐름
 
 ```
-이벤트 스트림 (mock JSON | SSE API)
+이벤트 스트림 (생성 시나리오 | SSE API)
       │  transport/  ← 유일한 교체 지점
       ▼
 runStore.events[]           원본 이벤트, 절대 변형하지 않음
@@ -36,16 +37,16 @@ nodes[] / edges[]           좌표는 아직 없음
 ```
 src/
 ├─ entities/          도메인 — event(백엔드 계약) / run(상태) / reduce(순수 리듀서)
-├─ transport/         드라이버 추상화 — mockDriver, sseDriver, createDriver
+├─ transport/         드라이버 추상화 — scenario(프롬프트→시나리오), mockDriver, sseDriver
 ├─ stores/            runStore(도메인) / viewStore(선택·좌표 오버라이드·필터)
 └─ features/
-   ├─ graph/          FlowCanvas, derive, layout/elk, nodes/, edges/
+   ├─ graph/          FlowCanvas, derive, layout/elk, nodes/, edges/, CanvasEmpty
    ├─ prompt/         하단 요청 입력 바 (Enter 전송 / Shift+Enter 줄바꿈)
    ├─ panel/          우측 탭 패널 셸 (결과 ↔ 에이전트)
    ├─ result/         요청↔답변 뷰 + 크게 보기 오버레이
    ├─ inspector/      선택한 에이전트의 입출력·도구 호출·로그
    ├─ timeline/       이벤트 인덱스 스크러버 (LIVE ↔ 과거 시점)
-   └─ session/        툴바 — 실행 선택, 재생 속도, 표시 옵션
+   └─ session/        툴바 — 재생 속도, 다시 재생, 표시 옵션
 ```
 
 ## 설계 결정 3가지
@@ -76,9 +77,16 @@ src/
 ├──────────────────────────┴───────────────────────────────────┤
 │ 타임라인 스크러버                                              │
 ├──────────────────────────────────────────────────────────────┤
-│ [ 요청을 입력하세요...                              ]  [실행]  │
+│  예시 · 예시 · 예시                                            │
+│ ┌──────────────────────────────────────────────────────────┐ │
+│ │ 에이전트에게 무엇을 요청할까요?                             │ │
+│ │ Enter 전송 · Shift+Enter 줄바꿈              [ 실행 ↵ ]   │ │
+│ └──────────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────────┘
 ```
+
+앱은 **자동으로 실행을 시작하지 않는다.** 요청을 입력해야 시작하고, 그 전까지 캔버스에는
+안내만 뜬다.
 
 파이프라인의 답변은 **루트 에이전트**(= `parentId`가 없는 에이전트)의 `agent.finished.result`다.
 백엔드는 여기에 사용자에게 보여줄 최종 텍스트를 넣어주기만 하면 된다 (줄바꿈 `\n` 그대로 렌더).
@@ -108,14 +116,23 @@ VITE_API_URL=http://localhost:8000
 응답:  { "runId": "run-7f3a" }
 ```
 
-mock 모드에서는 준비된 시나리오 id를 돌려준다 (프롬프트에 실패/에러/장애 키워드가 있으면
-`run-002`, 아니면 `run-001`).
+mock 모드에서는 `transport/scenario.ts`가 프롬프트에서 실행 시나리오를 만들어 메모리에 담고
+그 id를 돌려준다. 프롬프트에서 검색어를 뽑아내고 길이·키워드로 파이프라인 모양을 고른다.
+
+| 조건 | 파이프라인 |
+|---|---|
+| 실패/에러/장애 키워드 | orchestrator → fetcher(503) → cache fallback |
+| 16자 미만 | orchestrator → worker |
+| 그 외 | orchestrator → researcher → analyst → (40자 초과면 critic) → writer |
+
+시뮬레이션이 없는 사실을 지어내지 않도록, 최종 답변은 목업임을 밝히고
+어떤 파이프라인이 돌았는지만 요약한다.
 
 ### 2) 이벤트 스트림 — `GET {VITE_API_URL}/runs/{runId}/stream` (text/event-stream)
 
 ```
 event: meta
-data: {"runId":"run-001","title":"리서치 파이프라인"}
+data: {"runId":"run-7f3a","title":"전기차 시장 조사"}
 
 event: agent
 data: {"type":"agent.started","ts":0.0,"agentId":"orchestrator","label":"Orchestrator","role":"orchestrator"}

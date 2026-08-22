@@ -1,28 +1,43 @@
-import { useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { isLiveBackend } from '../../transport'
 import { useRunStore } from '../../stores/runStore'
 
 const EXAMPLES = [
   '2024년 전기차 시장 규모와 성장률을 조사해서 리포트로 정리해줘',
-  '가격 피드를 동기화해줘 (업스트림 장애 시나리오)',
+  '경쟁사 3곳의 요금제를 비교해줘',
+  '가격 피드 동기화 (장애 시나리오)',
 ]
 
 export function PromptBar() {
   const submit = useRunStore((s) => s.submit)
   const submitting = useRunStore((s) => s.submitting)
   const conn = useRunStore((s) => s.conn)
+  const hasRun = useRunStore((s) => Boolean(s.runId))
 
   const [text, setText] = useState('')
   const areaRef = useRef<HTMLTextAreaElement>(null)
 
+  // 페이지에 들어오면 바로 입력할 수 있게
+  useEffect(() => {
+    areaRef.current?.focus()
+  }, [])
+
   const busy = submitting || conn === 'connecting'
   const canSend = text.trim().length > 0 && !busy
+
+  const resize = (el: HTMLTextAreaElement) => {
+    el.style.height = 'auto'
+    el.style.height = `${el.scrollHeight}px`
+  }
 
   const send = () => {
     if (!canSend) return
     void submit(text)
     setText('')
-    if (areaRef.current) areaRef.current.style.height = 'auto'
+    if (areaRef.current) {
+      areaRef.current.style.height = 'auto'
+      areaRef.current.focus()
+    }
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -33,6 +48,15 @@ export function PromptBar() {
     }
   }
 
+  const useExample = (example: string) => {
+    setText(example)
+    const el = areaRef.current
+    if (el) {
+      el.focus()
+      requestAnimationFrame(() => resize(el))
+    }
+  }
+
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     send()
@@ -40,42 +64,59 @@ export function PromptBar() {
 
   return (
     <form className="prompt" onSubmit={onSubmit}>
-      <div className="prompt__row">
-        <textarea
-          ref={areaRef}
-          className="prompt__input"
-          rows={1}
-          value={text}
-          placeholder="에이전트에게 요청할 내용을 입력하세요  (Enter 전송 · Shift+Enter 줄바꿈)"
-          onChange={(e) => {
-            setText(e.target.value)
-            // 입력에 따라 높이를 늘린다 (최대 높이는 CSS가 잡는다)
-            e.target.style.height = 'auto'
-            e.target.style.height = `${e.target.scrollHeight}px`
-          }}
-          onKeyDown={onKeyDown}
-        />
-        <button className="prompt__send" type="submit" disabled={!canSend}>
-          {busy ? '시작 중…' : '실행'}
-        </button>
-      </div>
-
-      <div className="prompt__hint">
-        {!isLiveBackend && (
-          <span className="prompt__mock">
-            MOCK — 프롬프트 내용과 무관하게 준비된 시나리오가 재생됩니다
-          </span>
+      <div className="prompt__inner">
+        {!hasRun && (
+          <div className="prompt__examples">
+            <span className="prompt__examples-label">예시</span>
+            {EXAMPLES.map((example) => (
+              <button
+                key={example}
+                type="button"
+                className="prompt__example"
+                onClick={() => useExample(example)}
+              >
+                {example}
+              </button>
+            ))}
+          </div>
         )}
-        {EXAMPLES.map((example) => (
-          <button
-            key={example}
-            type="button"
-            className="prompt__example"
-            onClick={() => setText(example)}
-          >
-            {example}
-          </button>
-        ))}
+
+        <div className="prompt__field">
+          <textarea
+            ref={areaRef}
+            className="prompt__input"
+            rows={2}
+            value={text}
+            placeholder="에이전트에게 무엇을 요청할까요?"
+            onChange={(e) => {
+              setText(e.target.value)
+              resize(e.target)
+            }}
+            onKeyDown={onKeyDown}
+          />
+
+          <div className="prompt__actions">
+            <span className="prompt__keys">
+              <kbd>Enter</kbd> 전송 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 줄바꿈
+            </span>
+            <button className="prompt__send" type="submit" disabled={!canSend}>
+              {busy ? (
+                '시작 중…'
+              ) : (
+                <>
+                  실행 <span aria-hidden>↵</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {!isLiveBackend && (
+          <p className="prompt__mock">
+            MOCK 모드 — 입력한 요청으로 실행 시나리오를 생성해 재생합니다. 백엔드가 연결되면
+            같은 요청이 실제 에이전트로 전달됩니다.
+          </p>
+        )}
       </div>
     </form>
   )
