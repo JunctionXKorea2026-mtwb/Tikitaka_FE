@@ -98,7 +98,10 @@ function TurnCard({
         <button className="turn__ask" onClick={onToggle} aria-expanded={open}>
           <span className="turn__caret">{open ? '▾' : '▸'}</span>
           <span className="turn__index">{number}</span>
-          <span className="turn__prompt">{turn.prompt}</span>
+          <span className="turn__prompt">
+            {turn.titleSummary || turn.prompt}
+            {turn.titleSummary && <em className="turn__full">{turn.prompt}</em>}
+          </span>
         </button>
 
         {!expanded && !active && (
@@ -130,6 +133,12 @@ function TurnCard({
                   복사
                 </button>
               </header>
+              {turn.resultSummary && (
+                <p className="answer__digest">
+                  <span className="answer__digest-key">요약</span>
+                  {turn.resultSummary}
+                </p>
+              )}
               <p className={`answer__text${expanded ? ' answer__text--lg' : ''}`}>
                 {root.result ?? '결과 없음'}
               </p>

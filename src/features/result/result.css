@@ -451,3 +451,38 @@
   border: 1px solid color-mix(in srgb, var(--running) 45%, transparent);
   color: var(--running);
 }
+
+/* 요약 제목 아래 원문 질문 — 요약이 원문을 가리지 않게 */
+.turn__full {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-style: normal;
+  line-height: 1.45;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 결론 요약 — 원문 위에 먼저 읽을 것 */
+.answer__digest {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+
+.answer__digest-key {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}

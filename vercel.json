@@ -7,7 +7,7 @@
   "rewrites": [
     {
       "source": "/backend/:path*",
-      "destination": "https://615d-117-111-17-172.ngrok-free.app/:path*"
+      "destination": "https://ee2c-106-101-130-74.ngrok-free.app/:path*"
     }
   ]
 }

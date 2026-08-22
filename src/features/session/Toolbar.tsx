@@ -33,7 +33,7 @@ export function Toolbar() {
             <p>
               {turn ? (
                 <>
-                  {turnCount}개 턴 · {turn.title || turn.prompt}
+                  {turnCount}개 턴 · {turn.titleSummary || turn.title || turn.prompt}
                   <code className="toolbar__id" title={turn.id}>
                     {turn.id.slice(0, 8)}
                   </code>

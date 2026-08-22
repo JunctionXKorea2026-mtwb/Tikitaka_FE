@@ -115,6 +115,7 @@ export function AtomScene() {
           >
             <Atom
               guard={dragGuard}
+              title={item.title}
               atom={item.atom}
               active={item.id === activeId}
               target={item.id === targetId}
@@ -163,6 +164,8 @@ interface MoleculeItem {
   id: string
   origin: Vec3
   atom: AtomModel
+  /** 화면에 띄울 짧은 제목 (LLM 요약이 있으면 그것, 없으면 질문 앞부분) */
+  title: string
 }
 
 interface Molecule {
@@ -191,7 +194,12 @@ function buildMolecule(turns: Turn[]): Molecule {
         if (k !== key && k.startsWith(`${turn.id}:`)) atomCache.delete(k)
       }
     }
-    atoms.push({ id: turn.id, origin: originOf.get(turn.id) ?? ORIGIN3, atom })
+    atoms.push({
+      id: turn.id,
+      origin: originOf.get(turn.id) ?? ORIGIN3,
+      atom,
+      title: turn.titleSummary || turn.prompt,
+    })
   }
 
   const bonds = placements
@@ -239,6 +247,7 @@ function Atom({
   atom,
   active,
   target,
+  title,
   discussionId,
   guard,
   onSelectTurn,
@@ -247,6 +256,7 @@ function Atom({
   active: boolean
   /** 다음 질문이 여기에 붙는다 */
   target: boolean
+  title: string
   discussionId?: string
   guard: React.RefObject<boolean>
   onSelectTurn: () => void
@@ -313,6 +323,7 @@ function Atom({
         atom={atom}
         active={active}
         target={target}
+        title={title}
         discussionId={discussionId}
         selected={selectedId === atom.rootId}
         onSelect={() => {
@@ -524,6 +535,7 @@ function Nucleus({
   active,
   target,
   selected,
+  title,
   discussionId,
   onSelect,
 }: {
@@ -531,6 +543,7 @@ function Nucleus({
   active: boolean
   target: boolean
   selected: boolean
+  title: string
   discussionId?: string
   onSelect: () => void
 }) {
@@ -583,9 +596,9 @@ function Nucleus({
           className={`orb__label nucleus__label ${atom.rootStatusClass}${active ? ' is-active' : ''}${target ? ' is-target' : ''}`}
           title={atom.question || atom.rootLabel}
         >
-          {/* 질문 전문을 띄우면 원자마다 문단이 붙어 화면이 못 읽게 된다.
-              여기서는 짧게만 — 전문은 사이드바(결과 탭)에서 읽는다. */}
-          <b>{shortTitle(atom.question || atom.rootLabel)}</b>
+          {/* LLM이 줄인 제목이 있으면 그걸 쓴다. 없으면 질문 앞부분을 자른다.
+              질문 전문을 띄우면 원자마다 문단이 붙어 화면을 못 읽는다. */}
+          <b>{shortTitle(title || atom.question || atom.rootLabel, 22)}</b>
           <span>
             {target ? '↳ 여기에 이어서' : discussionId ? discussionId.slice(0, 8) : atom.rootLabel}
           </span>

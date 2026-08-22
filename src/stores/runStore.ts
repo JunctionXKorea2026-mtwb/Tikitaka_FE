@@ -3,7 +3,14 @@ import { persist } from 'zustand/middleware'
 import type { AgentEvent } from '../entities/event'
 import { reduceEvents } from '../entities/reduce'
 import { emptyRun, type RunState } from '../entities/run'
-import { createDriver, createRun, isLiveBackend, type RunDriver } from '../transport'
+import {
+  createDriver,
+  createRun,
+  isLiveBackend,
+  summarizeResultFor,
+  summarizeTitleFor,
+  type RunDriver,
+} from '../transport'
 
 export type ConnState = 'idle' | 'connecting' | 'streaming' | 'done' | 'error'
 
@@ -27,6 +34,10 @@ export interface Turn {
   events: AgentEvent[]
   conn: ConnState
   error?: string
+  /** LLM이 줄인 한 줄 제목. 원자 라벨과 목록에 쓴다. */
+  titleSummary?: string
+  /** LLM이 줄인 결론 요약. 원문 위에 먼저 보여준다. */
+  resultSummary?: string
 }
 
 interface RunStore {
@@ -47,6 +58,8 @@ interface RunStore {
   submit: (prompt: string, options?: { newTopic?: boolean }) => Promise<void>
   /** 새로고침 뒤, 아직 안 끝난 실행이나 비어 있는 턴을 다시 불러온다 */
   resume: () => void
+  /** 질문 제목과 결론을 LLM으로 줄인다 (백엔드가 있을 때만) */
+  summarize: (id: string) => void
   /** 캔버스를 다른 턴으로 옮긴다 */
   selectTurn: (id: string) => void
   /** 활성 턴을 처음부터 다시 재생 */
@@ -97,7 +110,7 @@ export const useRunStore = create<RunStore>()(
           set((s) => ({ turns: [...s.turns, turn], activeId: runId, cursor: null }))
 
           driver = createDriver(runId, speed)
-          driver.start(handlersFor(set, runId))
+          driver.start(handlersFor(set, runId, (id) => get().summarize(id)))
         } catch (err) {
           set({ submitting: false })
           throw err instanceof Error ? err : new Error(String(err))
@@ -106,7 +119,34 @@ export const useRunStore = create<RunStore>()(
         }
       },
 
-      selectTurn(activeId) {
+      /**
+   * 제목·결론 요약.
+   *
+   * 이미 있으면 다시 부르지 않는다 — 요약도 LLM 호출이라 공짜가 아니고,
+   * 폴링이 끝날 때마다 부르면 같은 결론을 몇 번씩 요약하게 된다.
+   * 실패해도 조용히 넘어간다. 요약은 덤이지 본문이 아니다.
+   */
+  summarize(id) {
+    const turn = get().turns.find((t) => t.id === id)
+    if (!turn) return
+
+    if (!turn.titleSummary && turn.prompt) {
+      void summarizeTitleFor(turn.prompt)
+        .then((title) => title && patch(set, id, { titleSummary: title }))
+        .catch(() => {})
+    }
+
+    if (!turn.resultSummary) {
+      const result = rootResultOf(turn)
+      if (result && result.length > 160) {
+        void summarizeResultFor(result)
+          .then((summary) => summary && patch(set, id, { resultSummary: summary }))
+          .catch(() => {})
+      }
+    }
+  },
+
+  selectTurn(activeId) {
     set({ activeId, cursor: null })
     // 옮겨 간 턴이 비어 있으면(옛 저장본) 다시 불러온다
     const turn = activeTurn(get())
@@ -135,7 +175,7 @@ export const useRunStore = create<RunStore>()(
           turns: s.turns.map((t) => (t.id === turn.id ? { ...t, events: [], conn: 'connecting' } : t)),
         }))
         driver = createDriver(turn.id, get().speed)
-        driver.start(handlersFor(set, turn.id))
+        driver.start(handlersFor(set, turn.id, (id) => get().summarize(id)))
       },
 
       replay() {
@@ -149,7 +189,7 @@ export const useRunStore = create<RunStore>()(
         }))
 
         driver = createDriver(turn.id, get().speed)
-        driver.start(handlersFor(set, turn.id))
+        driver.start(handlersFor(set, turn.id, (id) => get().summarize(id)))
       },
 
       reset() {
@@ -204,7 +244,7 @@ const MAX_STORED_TURNS = 30
 const isSettledConn = (conn: ConnState) => conn === 'done' || conn === 'error'
 
 /** 드라이버 콜백. submit·replay·resume이 같은 걸 쓴다. */
-function handlersFor(set: SetFn, runId: string) {
+function handlersFor(set: SetFn, runId: string, onSettled?: (id: string) => void) {
   return {
     onOpen: (meta: { runId: string; title: string }) =>
       patch(set, runId, { title: meta.title, conn: 'streaming' as ConnState }),
@@ -212,7 +252,10 @@ function handlersFor(set: SetFn, runId: string) {
       set((s) => ({
         turns: s.turns.map((t) => (t.id === runId ? { ...t, events: [...t.events, event] } : t)),
       })),
-    onDone: () => patch(set, runId, { conn: 'done' as ConnState }),
+    onDone: () => {
+      patch(set, runId, { conn: 'done' as ConnState })
+      onSettled?.(runId)
+    },
     onError: (err: Error) =>
       patch(set, runId, { conn: 'error' as ConnState, error: err.message }),
   }
@@ -325,4 +368,14 @@ export function arrangeTurns(turns: Turn[]): ArrangedTurn[] {
   }
 
   return out
+}
+
+/** 루트 에이전트의 결과 = 그 턴의 최종 답변 */
+function rootResultOf(turn: Turn): string | undefined {
+  const run = reduceEvents(turn.id, turn.events)
+  for (const id of run.agentOrder) {
+    const agent = run.agents[id]
+    if (agent && !agent.parentId) return agent.result
+  }
+  return undefined
 }

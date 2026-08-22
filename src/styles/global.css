@@ -107,6 +107,11 @@ body {
   margin: 0;
   font-size: 12px;
   color: var(--muted);
+  /* 요약이 아직 안 왔으면 원문 질문이 오므로 한 줄로 자른다 */
+  max-width: 52ch;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .toolbar__actions {

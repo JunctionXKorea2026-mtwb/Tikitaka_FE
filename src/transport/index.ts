@@ -2,9 +2,23 @@ import type { RunFixture } from '../entities/event'
 import { createDiscussionDriver } from './discussionDriver'
 import { createMockDriver } from './mockDriver'
 import { buildScenario } from './scenario'
+import { summarizeResult, summarizeTitle } from './summarize'
 import type { RunDriver } from './types'
 
 export type { RunDriver, DriverHandlers } from './types'
+
+/**
+ * 제목·결론 요약. 백엔드가 없으면 아무 일도 하지 않는다 (mock은 요약할 게 없다).
+ */
+export async function summarizeTitleFor(prompt: string): Promise<string | null> {
+  if (!API_URL) return null
+  return summarizeTitle(API_URL, prompt)
+}
+
+export async function summarizeResultFor(result: string): Promise<string | null> {
+  if (!API_URL) return null
+  return summarizeResult(API_URL, result)
+}
 
 const API_URL = import.meta.env.VITE_API_URL as string | undefined
 /** 토론에 투입할 스쿼드. 백엔드 기본값을 그대로 쓴다. */
