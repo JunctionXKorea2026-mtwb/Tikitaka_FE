@@ -27,6 +27,16 @@ const SQUAD_ID =
 
 export const isLiveBackend = Boolean(API_URL)
 
+/**
+ * 백엔드가 받는 토픽 최대 길이.
+ *
+ * 넘기면 500과 함께 `Discussion topic exceeds maximum length (1024 bytes)` 가 온다.
+ * **글자 수가 아니라 바이트**라 한글은 3배로 센다 — 341자쯤이 한계다.
+ */
+export const MAX_TOPIC_BYTES = 1024
+
+export const topicBytes = (text: string) => new TextEncoder().encode(text).length
+
 /** mock 모드에서 생성한 시나리오. 다시 재생·속도 변경 때 같은 실행을 재사용한다. */
 const scenarios = new Map<string, RunFixture>()
 
@@ -57,7 +67,14 @@ export async function createRun(
       headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
       body: JSON.stringify({ topic: prompt, squad_id: SQUAD_ID }),
     })
-    if (!res.ok) throw new Error(`토론 생성 실패: ${res.status} ${res.statusText}`)
+    if (!res.ok) {
+      // 백엔드는 400짜리 사유를 500 본문에 담아 보낸다. 그 문장이 제일 쓸모 있다.
+      const detail = await res
+        .json()
+        .then((d: { detail?: string }) => d.detail)
+        .catch(() => undefined)
+      throw new Error(detail ? cleanDetail(detail) : `토론 생성 실패: ${res.status}`)
+    }
 
     const data = (await res.json()) as { discussionId?: string }
     if (!data.discussionId) throw new Error('응답에 discussionId가 없습니다')
@@ -87,4 +104,14 @@ export function createDriver(runId: string, speed = 1): RunDriver {
     }
   }
   return createMockDriver(fixture, speed)
+}
+
+/** 백엔드 오류 문구에서 앞의 래퍼(`CLI Error: Error: API error:`)를 걷어낸다 */
+function cleanDetail(detail: string): string {
+  const core = detail.replace(/^(CLI Error:\s*)?(Error:\s*)?(API error:\s*)?/i, '').trim()
+  if (/exceeds maximum length/i.test(core)) {
+    return `질문이 너무 깁니다 — 백엔드가 ${MAX_TOPIC_BYTES}바이트까지만 받습니다 (한글 약 341자).`
+  }
+  if (/cannot be empty/i.test(core)) return '질문이 비어 있습니다.'
+  return core || '토론 생성에 실패했습니다.'
 }

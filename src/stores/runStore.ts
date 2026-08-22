@@ -54,6 +54,8 @@ interface RunStore {
    */
   cursor: number | null
   speed: number
+  /** 질문을 보내지 못했을 때의 사유. 화면에 띄운다. */
+  submitError?: string
 
   submit: (prompt: string, options?: { newTopic?: boolean }) => Promise<void>
   /** 새로고침 뒤, 아직 안 끝난 실행이나 비어 있는 턴을 다시 불러온다 */
@@ -69,6 +71,7 @@ interface RunStore {
   disconnect: () => void
   setCursor: (cursor: number | null) => void
   setSpeed: (speed: number) => void
+  clearSubmitError: () => void
 }
 
 let driver: RunDriver | null = null
@@ -205,6 +208,7 @@ export const useRunStore = create<RunStore>()(
 
       setCursor: (cursor) => set({ cursor }),
       setSpeed: (speed) => set({ speed }),
+      clearSubmitError: () => set({ submitError: undefined }),
     }),
     {
       name: 'agent-flow-thread',

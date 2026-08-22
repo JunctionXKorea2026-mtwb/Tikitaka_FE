@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
-import { isLiveBackend } from '../../transport'
+import {
+  isLiveBackend,
+  MAX_TOPIC_BYTES,
+  summarizeTitleFor,
+  topicBytes,
+} from '../../transport'
 import { activeTurn, useRunStore } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
 
@@ -16,6 +21,13 @@ export function PromptBar() {
   const turnCount = useRunStore((s) => s.turns.length)
 
   const [text, setText] = useState('')
+  const [shortening, setShortening] = useState(false)
+  const submitError = useRunStore((s) => s.submitError)
+  const clearSubmitError = useRunStore((s) => s.clearSubmitError)
+
+  // 백엔드는 바이트로 센다. 한글은 3배라 글자 수만 보면 넘는 걸 못 알아챈다.
+  const bytes = topicBytes(text)
+  const tooLong = isLiveBackend && bytes > MAX_TOPIC_BYTES
   // 3D도 "다음 질문이 어디에 붙는지"를 알아야 대상 원자를 표시할 수 있다
   const composeMode = useViewStore((s) => s.composeMode)
   const setComposeMode = useViewStore((s) => s.setComposeMode)
@@ -27,8 +39,8 @@ export function PromptBar() {
     areaRef.current?.focus()
   }, [])
 
-  const busy = submitting || conn === 'connecting'
-  const canSend = text.trim().length > 0 && !busy
+  const busy = submitting || conn === 'connecting' || shortening
+  const canSend = text.trim().length > 0 && !busy && !tooLong
 
   const resize = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto'
@@ -120,6 +132,7 @@ export function PromptBar() {
             }
             onChange={(e) => {
               setText(e.target.value)
+              clearSubmitError()
               resize(e.target)
             }}
             onKeyDown={onKeyDown}
@@ -140,6 +153,31 @@ export function PromptBar() {
             </button>
           </div>
         </div>
+
+        {(tooLong || submitError) && (
+          <p className="prompt__alert">
+            {tooLong
+              ? `질문이 ${bytes}바이트입니다. 백엔드는 ${MAX_TOPIC_BYTES}바이트까지만 받습니다 (한글 약 341자).`
+              : submitError}
+            {tooLong && (
+              <button
+                type="button"
+                className="prompt__shorten"
+                disabled={shortening}
+                onClick={() => {
+                  // 몰래 줄여서 보내지 않는다. 줄인 문장을 입력창에 넣어 확인하고 보내게 한다.
+                  setShortening(true)
+                  void summarizeTitleFor(text)
+                    .then((short) => short && setText(short))
+                    .catch(() => {})
+                    .finally(() => setShortening(false))
+                }}
+              >
+                {shortening ? '줄이는 중…' : '요약해서 줄이기'}
+              </button>
+            )}
+          </p>
+        )}
 
         {!isLiveBackend && (
           <p className="prompt__mock">

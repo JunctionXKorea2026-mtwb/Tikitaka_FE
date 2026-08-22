@@ -163,3 +163,54 @@
   background: var(--running);
   color: #fff;
 }
+
+/* 바이트 카운터 — 백엔드가 글자 수가 아니라 바이트로 센다 */
+.prompt__bytes {
+  margin-left: 10px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.prompt__bytes.is-over {
+  border-color: color-mix(in srgb, var(--error) 55%, transparent);
+  color: var(--error);
+}
+
+/* 보내지 못한 이유 */
+.prompt__alert {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 2px 0;
+  padding: 8px 11px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--error) 40%, transparent);
+  background: color-mix(in srgb, var(--error) 12%, transparent);
+  color: #fecaca;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.prompt__shorten {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.prompt__shorten:hover:not(:disabled) {
+  border-color: var(--error);
+}
+
+.prompt__shorten:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
