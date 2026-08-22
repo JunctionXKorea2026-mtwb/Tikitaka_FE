@@ -51,13 +51,21 @@ body {
  */
 .app__body {
   position: relative;
-  display: block;
+  /* 한 칸짜리 그리드. 칸이 캔버스 높이를 보장한다.
+     사이드바는 이 칸을 쓰지 않고 위에 얹히므로 열고 닫아도 캔버스가 안 변한다. */
+  display: grid;
+  grid-template-columns: 1fr;
   min-height: 0;
 }
 
+/*
+ * 안에 있는 .atom3d가 absolute라 흐름에서 빠진다.
+ * 그래서 이 칸이 높이를 보장해야 한다 — 안 그러면 높이가 0이 되어 화면이 사라진다.
+ */
 .app__canvas {
   position: relative;
   min-width: 0;
+  min-height: 0;
 }
 
 /* ---------- toolbar ---------- */
