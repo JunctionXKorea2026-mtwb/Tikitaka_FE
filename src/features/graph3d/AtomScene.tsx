@@ -3,21 +3,33 @@ import { Canvas, useFrame } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useRunState } from '../../stores/runStore'
+import { useRunState, useRunStore } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
-import { AtomOrb } from './AtomOrb'
-import { buildAtom, toThree, type AtomModel, type Body, type Pulse, type Spoke } from './atom'
+import {
+  buildAtom,
+  icosphere,
+  toThree,
+  type AtomModel,
+  type AtomNode,
+  type Link,
+  type Pulse,
+  type Shell,
+} from './atom'
 
 /**
- * 3D 홀로그램 뷰 — three.js로 그리는 방사형 구조.
+ * 3D 홀로그램 뷰 — 실행 하나를 원자 하나로 그린다.
  *
- * 물체는 **움직이지 않는다.** 각자 공전하면 눈이 쉴 곳이 없어 오히려 안 읽힌다.
- * 움직이는 것은 둘뿐이고 각각 이유가 있다.
- *   - 카메라의 느린 자동 회전 (입체감을 주기 위해, 끌 수 있다)
- *   - 메시지 스파크 (지금 무엇이 오가는지 알려준다)
+ *   핵          사용자의 질문
+ *   안쪽 오비탈  에이전트 (격자 반지름 215)
+ *   바깥 오비탈  도구 호출 (격자 반지름 330)
  *
- * 모형과 배치(atom.ts)는 렌더러와 무관하다. 좌표계만 맞춘다:
- * px 단위를 three 단위로 줄이고(SCALE), CSS의 y-down을 three의 y-up으로 뒤집는다.
+ * 껍질은 측지선 격자로 그린다. 노드는 그 격자 **꼭짓점에 박혀** 있어서
+ * 떠다니는 스티커가 아니라 구조의 일부로 보인다.
+ *
+ * 움직이는 것은 셋뿐이고 각각 이유가 있다.
+ *   - 카메라의 느린 자동 회전 (입체감, 끌 수 있다)
+ *   - 껍질의 아주 느린 자전 (오비탈이 살아 있다는 신호)
+ *   - 메시지 스파크 (지금 무엇이 오가는지)
  */
 
 /** px → three 월드 단위 */
@@ -34,47 +46,46 @@ const COLOR: Record<string, string> = {
 }
 
 const colorOf = (status: string) => COLOR[status] ?? '#8ea6cc'
-const NEUTRON = '#93a9c9'
+/** 격자 자체의 색 — 노드보다 어두워야 노드가 읽힌다 */
+const LATTICE = '#2f7fd0'
 
 export function AtomScene() {
   const run = useRunState()
-  const atom = useMemo(() => buildAtom(run), [run])
+  const question = useRunStore((s) => s.prompt || s.title)
+  const atom = useMemo(() => buildAtom(run, question), [run, question])
   const [spin, setSpin] = useState(true)
 
-  // 그래프가 커지면 카메라를 뒤로 물린다
-  const distance = Math.max(5.5, atom.extent * SCALE * 2.1)
+  // 바깥 껍질이 화면을 채우도록
+  const distance = atom.extent * SCALE * 2.05
 
   return (
     <div className="atom3d">
       <Canvas
         dpr={[1, 2]}
-        camera={{ position: [0, distance * 0.3, distance], fov: 45, near: 0.1, far: 120 }}
+        camera={{ position: [0, distance * 0.16, distance], fov: 45, near: 0.1, far: 120 }}
         gl={{ antialias: true }}
         onPointerMissed={() => useViewStore.getState().select(null)}
       >
         <color attach="background" args={['#03050d']} />
-        <fog attach="fog" args={['#03050d', distance * 1.4, distance * 3.4]} />
-
-        {/* 발광 재질이 주역이지만, 약한 조명이 있어야 구체의 실루엣이 산다 */}
-        <ambientLight intensity={0.4} />
-        <pointLight position={[6, 8, 6]} intensity={50} color="#bcd8ff" distance={60} />
+        <ambientLight intensity={0.45} />
+        <pointLight position={[6, 8, 6]} intensity={45} color="#bcd8ff" distance={60} />
 
         <Starfield />
         <Atom atom={atom} />
 
         <OrbitControls
           enablePan={false}
-          minDistance={distance * 0.4}
-          maxDistance={distance * 2.6}
+          minDistance={distance * 0.3}
+          maxDistance={distance * 2.4}
           autoRotate={spin}
-          autoRotateSpeed={0.35}
+          autoRotateSpeed={0.32}
           rotateSpeed={0.7}
           enableDamping
           dampingFactor={0.08}
         />
 
         <EffectComposer>
-          <Bloom intensity={2.1} luminanceThreshold={0.12} luminanceSmoothing={0.6} mipmapBlur />
+          <Bloom intensity={1.9} luminanceThreshold={0.14} luminanceSmoothing={0.6} mipmapBlur />
         </EffectComposer>
       </Canvas>
 
@@ -92,177 +103,256 @@ export function AtomScene() {
 function Atom({ atom }: { atom: AtomModel }) {
   const select = useViewStore((s) => s.select)
   const selectedId = useViewStore((s) => s.selectedId)
+  const shells = useRef<THREE.Group>(null)
+
+  // 껍질만 아주 느리게 돈다. 노드도 함께 돌아야 격자에 박힌 채로 보인다.
+  useFrame(({ clock }) => {
+    if (shells.current) shells.current.rotation.y = clock.elapsedTime * 0.035
+  })
+
+  if (!atom.rootId) return null
 
   return (
     <group>
-      {/* 스포크 — 부모-자식 연결. 방사 구조를 눈에 보이게 한다 */}
-      {atom.spokes.map((spoke) => (
-        <SpokeLine key={spoke.id} spoke={spoke} />
-      ))}
+      <group ref={shells}>
+        <Lattice shell={atom.shells[0]} opacity={0.22} />
+        <Lattice shell={atom.shells[1]} opacity={0.13} />
 
-      {/* 에너지선 (에이전트 간 메시지) */}
-      {atom.pulses.map((pulse) => (
-        <PulseLine key={pulse.id} pulse={pulse} />
-      ))}
-
-      {/* 핵 */}
-      <group
-        onClick={(e) => {
-          e.stopPropagation()
-          select(atom.rootId)
-        }}
-      >
-        {atom.nucleons.map((n, i) => (
-          <group key={i} position={toThree(n.position, SCALE)}>
-            <Sphere
-              radius={(n.kind === 'proton' ? 9 : 7.5) * SCALE}
-              color={n.kind === 'proton' ? colorOf(atom.rootStatus) : NEUTRON}
-              intensity={n.kind === 'proton' ? 3 : 1.2}
-            />
-          </group>
+        {/* 결합선 — 핵에서 에이전트로, 에이전트에서 도구로 */}
+        {atom.links.map((link) => (
+          <Bond key={link.id} link={link} />
         ))}
-        {atom.rootId && (
-          <AtomOrb
-            radius={(atom.nucleusRadius + 26) * SCALE}
-            color={colorOf(atom.rootStatus)}
-            intensity={0}
-            detail={1.4}
-            core={false}
-          />
-        )}
 
-        {atom.rootId && (
-          <Html
-            position={[0, -(atom.nucleusRadius + 40) * SCALE, 0]}
-            center
-            distanceFactor={10}
-            zIndexRange={[10, 0]}
-          >
-            <div className={`orb__label nucleus__label ${atom.rootStatusClass}`}>
-              <b>{atom.rootLabel}</b>
-              <span>
-                {atom.nucleons.filter((n) => n.kind === 'proton').length}p ·{' '}
-                {atom.nucleons.filter((n) => n.kind === 'neutron').length}n
-              </span>
-            </div>
-          </Html>
-        )}
+        {/* 에너지선 (에이전트 간 메시지) */}
+        {atom.pulses.map((pulse) => (
+          <PulseLine key={pulse.id} pulse={pulse} />
+        ))}
+
+        {/* 격자에 박힌 노드 */}
+        {atom.nodes.map((node) => (
+          <NodeOrb
+            key={node.id}
+            node={node}
+            selected={selectedId === node.id}
+            onSelect={() => select(node.kind === 'agent' ? node.id : null)}
+          />
+        ))}
       </group>
 
-      {/* 에이전트와 도구 */}
-      {atom.bodies.map((body) => (
-        <BodyNode
-          key={body.id}
-          body={body}
-          selected={selectedId === body.id}
-          onSelect={() => select(body.kind === 'agent' ? body.id : null)}
-        />
-      ))}
+      {/* 핵 = 질문. 껍질과 함께 돌지 않는다 — 중심은 고정이어야 읽힌다 */}
+      <Nucleus
+        atom={atom}
+        selected={selectedId === atom.rootId}
+        onSelect={() => select(atom.rootId)}
+      />
     </group>
   )
 }
 
-function BodyNode({
-  body,
+/** 오비탈 껍질을 이루는 측지선 격자 — 모서리 선 + 꼭짓점 점 */
+function Lattice({ shell, opacity }: { shell: Shell; opacity: number }) {
+  const { lines, points } = useMemo(() => {
+    const { vertices, edges } = icosphere(shell.radius, shell.detail)
+
+    const linePositions = new Float32Array(edges.length * 6)
+    edges.forEach(([a, b], i) => {
+      linePositions.set([...toThree(vertices[a], SCALE), ...toThree(vertices[b], SCALE)], i * 6)
+    })
+
+    const pointPositions = new Float32Array(vertices.length * 3)
+    vertices.forEach((v, i) => pointPositions.set(toThree(v, SCALE), i * 3))
+
+    const l = new THREE.BufferGeometry()
+    l.setAttribute('position', new THREE.BufferAttribute(linePositions, 3))
+    const p = new THREE.BufferGeometry()
+    p.setAttribute('position', new THREE.BufferAttribute(pointPositions, 3))
+    return { lines: l, points: p }
+  }, [shell.radius, shell.detail])
+
+  useEffect(
+    () => () => {
+      lines.dispose()
+      points.dispose()
+    },
+    [lines, points],
+  )
+
+  return (
+    <group>
+      <lineSegments geometry={lines}>
+        <lineBasicMaterial
+          color={LATTICE}
+          transparent
+          opacity={opacity}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </lineSegments>
+      <points geometry={points}>
+        <pointsMaterial
+          color="#8fc4ff"
+          size={0.035}
+          sizeAttenuation
+          transparent
+          opacity={Math.min(1, opacity * 3.2)}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </points>
+    </group>
+  )
+}
+
+/** 핵 — 질문. 밝은 코어와 그것을 감싼 빛무리. */
+function Nucleus({
+  atom,
   selected,
   onSelect,
 }: {
-  body: Body
+  atom: AtomModel
   selected: boolean
   onSelect: () => void
 }) {
-  const isAgent = body.kind === 'agent'
-  const busy = body.status === 'running' || body.status === 'thinking' || body.status === 'calling'
+  const core = useRef<THREE.MeshStandardMaterial>(null)
+  const color = colorOf(atom.rootStatus)
+  const busy = atom.rootStatus === 'running' || atom.rootStatus === 'thinking'
+  const r = atom.nucleusRadius * SCALE
+  const base = selected ? 8 : 5
+
+  useFrame(({ clock }) => {
+    if (!busy || !core.current) return
+    core.current.emissiveIntensity = base * (0.8 + 0.28 * Math.sin(clock.elapsedTime * 2.4))
+  })
 
   return (
     <group
-      position={toThree(body.position, SCALE)}
       onClick={(e) => {
         e.stopPropagation()
         onSelect()
       }}
     >
-      <AtomOrb
-        radius={(isAgent ? 34 : 17) * SCALE}
-        color={colorOf(String(body.status))}
-        intensity={selected ? 7 : isAgent ? 4 : 2.6}
-        pulse={busy}
-        detail={isAgent ? 1 : 0.5}
-      />
-      <Html position={[isAgent ? 0.28 : 0.17, 0.07, 0]} distanceFactor={10} zIndexRange={[9, 0]}>
-        <div className={`orb__label ${body.statusClass} orb--${body.kind}-label`}>
-          <b>{body.label}</b>
-          {isAgent && <span>{body.status}</span>}
+      <mesh>
+        <sphereGeometry args={[r * 0.52, 32, 24]} />
+        <meshStandardMaterial
+          ref={core}
+          color="#ffffff"
+          emissive={color}
+          emissiveIntensity={base}
+          toneMapped={false}
+        />
+      </mesh>
+
+      {/* 빛무리 — 안쪽 면을 칠해 코어를 감싼다 */}
+      <mesh>
+        <sphereGeometry args={[r, 32, 24]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.2}
+          side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <Html position={[0, -r * 2.2, 0]} center distanceFactor={9} zIndexRange={[11, 0]}>
+        <div className={`orb__label nucleus__label ${atom.rootStatusClass}`}>
+          <b>{atom.question || atom.rootLabel}</b>
+          <span>{atom.rootLabel}</span>
         </div>
       </Html>
     </group>
   )
 }
 
-/** 발광 구체. Bloom이 이 emissive를 받아 광채로 번지게 한다. */
-function Sphere({
-  position,
-  radius,
-  color,
-  intensity,
-  pulse = false,
+/** 격자 꼭짓점에 박힌 노드 */
+function NodeOrb({
+  node,
+  selected,
+  onSelect,
 }: {
-  position?: [number, number, number]
-  radius: number
-  color: string
-  intensity: number
-  pulse?: boolean
+  node: AtomNode
+  selected: boolean
+  onSelect: () => void
 }) {
-  const material = useRef<THREE.MeshStandardMaterial>(null)
+  const isAgent = node.kind === 'agent'
+  const busy = node.status === 'running' || node.status === 'thinking' || node.status === 'calling'
+  const color = colorOf(String(node.status))
+  const r = (isAgent ? 15 : 9) * SCALE
+  const core = useRef<THREE.MeshStandardMaterial>(null)
+  const base = selected ? 8 : isAgent ? 4.5 : 3
 
   useFrame(({ clock }) => {
-    if (!pulse || !material.current) return
-    // 실행 중인 것만 숨쉰다 — 멈춘 것과 구분되고, 자리는 그대로라 산만하지 않다
-    material.current.emissiveIntensity = intensity * (0.78 + 0.3 * Math.sin(clock.elapsedTime * 3))
+    if (!busy || !core.current) return
+    // 자리는 그대로 두고 밝기만 숨쉰다
+    core.current.emissiveIntensity = base * (0.76 + 0.32 * Math.sin(clock.elapsedTime * 3))
   })
 
   return (
-    <mesh position={position}>
-      <sphereGeometry args={[radius, 32, 24]} />
-      <meshStandardMaterial
-        ref={material}
-        color={color}
-        emissive={color}
-        emissiveIntensity={intensity}
-        roughness={0.28}
-        metalness={0.05}
-        toneMapped={false}
-      />
-    </mesh>
+    <group
+      position={toThree(node.position, SCALE)}
+      onClick={(e) => {
+        e.stopPropagation()
+        onSelect()
+      }}
+    >
+      <mesh>
+        <sphereGeometry args={[r, 24, 18]} />
+        <meshStandardMaterial
+          ref={core}
+          color="#ffffff"
+          emissive={color}
+          emissiveIntensity={base}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <mesh>
+        <sphereGeometry args={[r * 2.4, 20, 16]} />
+        <meshBasicMaterial
+          color={color}
+          transparent
+          opacity={0.14}
+          side={THREE.BackSide}
+          blending={THREE.AdditiveBlending}
+          depthWrite={false}
+          toneMapped={false}
+        />
+      </mesh>
+
+      <Html position={[r * 2.2, r * 1.4, 0]} distanceFactor={9} zIndexRange={[9, 0]}>
+        <div className={`orb__label ${node.statusClass} orb--${node.kind}-label`}>
+          <b>{node.label}</b>
+          {isAgent && <span>{node.status}</span>}
+        </div>
+      </Html>
+    </group>
   )
 }
 
-/** 부모에서 자식으로 뻗는 선. 위치가 고정이라 한 번만 만든다. */
-function SpokeLine({ spoke }: { spoke: Spoke }) {
+/** 핵→에이전트 / 에이전트→도구 결합선 */
+function Bond({ link }: { link: Link }) {
   const points = useMemo(
-    () => [toThree(spoke.from, SCALE), toThree(spoke.to, SCALE)],
-    [spoke.from, spoke.to],
+    () => [toThree(link.from, SCALE), toThree(link.to, SCALE)],
+    [link.from, link.to],
   )
 
   return (
     <Line
       points={points}
-      color={colorOf(spoke.status)}
-      lineWidth={spoke.kind === 'agent' ? 1.2 : 0.8}
+      color={colorOf(link.status)}
+      lineWidth={link.kind === 'agent' ? 1.1 : 0.8}
       transparent
-      opacity={spoke.kind === 'agent' ? 0.3 : 0.16}
-      dashed={spoke.kind === 'tool'}
-      dashSize={0.06}
-      gapSize={0.05}
+      opacity={link.kind === 'agent' ? 0.32 : 0.18}
       toneMapped={false}
     />
   )
 }
 
-/**
- * 에이전트 간 메시지. 선은 고정이고, 활성일 때만 스파크가 지나간다.
- * 이 움직임은 "지금 무엇이 오가는지"를 알려주므로 남겨 둔다.
- */
+/** 에이전트 간 메시지. 선은 고정이고, 활성일 때만 스파크가 지나간다. */
 function PulseLine({ pulse }: { pulse: Pulse }) {
   const spark = useRef<THREE.Mesh>(null)
   const a = useMemo(() => toThree(pulse.from, SCALE), [pulse.from])
@@ -278,32 +368,32 @@ function PulseLine({ pulse }: { pulse: Pulse }) {
     )
   })
 
+  if (!pulse.active) return null
+
   return (
     <group>
       <Line
         points={[a, b]}
-        color={pulse.active ? '#6fb6ff' : '#38507a'}
-        lineWidth={pulse.active ? 1.6 : 0.7}
+        color="#6fb6ff"
+        lineWidth={1.5}
         transparent
-        opacity={pulse.active ? 0.85 : 0.14}
+        opacity={0.7}
         toneMapped={false}
       />
-      {pulse.active && (
-        <mesh ref={spark}>
-          <sphereGeometry args={[0.035, 16, 12]} />
-          <meshStandardMaterial
-            color="#ffffff"
-            emissive="#9fd0ff"
-            emissiveIntensity={7}
-            toneMapped={false}
-          />
-        </mesh>
-      )}
+      <mesh ref={spark}>
+        <sphereGeometry args={[0.032, 16, 12]} />
+        <meshStandardMaterial
+          color="#ffffff"
+          emissive="#9fd0ff"
+          emissiveIntensity={7}
+          toneMapped={false}
+        />
+      </mesh>
     </group>
   )
 }
 
-/** 배경 별. Points 하나로 1500개를 찍는다. */
+/** 배경 별. Points 하나로 1200개를 찍는다. */
 function Starfield() {
   const geometry = useMemo(() => {
     let seed = 20260822
@@ -312,13 +402,12 @@ function Starfield() {
       return seed / 4294967296
     }
 
-    const count = 1500
+    const count = 1200
     const positions = new Float32Array(count * 3)
     for (let i = 0; i < count; i++) {
-      // 구껍질에 고르게 뿌린다 — 뭉치지 않는다
       const theta = rand() * Math.PI * 2
       const phi = Math.acos(rand() * 2 - 1)
-      const r = 30 + rand() * 24
+      const r = 26 + rand() * 22
       positions[i * 3] = r * Math.sin(phi) * Math.cos(theta)
       positions[i * 3 + 1] = r * Math.cos(phi)
       positions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta)
@@ -334,11 +423,13 @@ function Starfield() {
   return (
     <points geometry={geometry}>
       <pointsMaterial
-        size={0.09}
+        size={0.085}
         color="#c8dcff"
         sizeAttenuation
         transparent
-        opacity={0.7}
+        opacity={0.6}
+        blending={THREE.AdditiveBlending}
+        depthWrite={false}
         toneMapped={false}
       />
     </points>
