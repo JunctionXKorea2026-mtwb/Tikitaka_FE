@@ -1,8 +1,18 @@
+/*
+ * 3D 홀로그램 뷰.
+ *
+ * 규칙 하나: 홀로그램 처리는 "재질"까지만 한다.
+ * 상태 색(running/thinking/calling/done/error)은 정보이므로 시안으로 덮지 않고
+ * --accent가 그대로 몬다. 여기 있는 모든 발광은 --accent를 섞어 쓴다.
+ */
+
 .flow3d {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: var(--bg);
+  background:
+    radial-gradient(ellipse 70% 55% at 50% 42%, #101526 0%, transparent 70%),
+    #05060b;
   cursor: grab;
   touch-action: none;
   /* 원근 거리. 클수록 왜곡이 약해진다 */
@@ -12,6 +22,39 @@
 
 .flow3d:active {
   cursor: grabbing;
+}
+
+/* ---------- 배경 연출 ---------- */
+
+/* DOM 노드 하나에 box-shadow로 별 200개 (JS가 목록을 만든다) */
+.flow3d__stars {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: drift 240s linear infinite;
+}
+
+@keyframes drift {
+  to {
+    transform: translate(-160px, 90px);
+  }
+}
+
+/* 스캔라인 — 홀로그램 느낌의 8할 */
+.flow3d__scan {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(150, 200, 255, 0.028) 0 1px,
+    transparent 1px 3px
+  );
 }
 
 /* 무대의 원점을 화면 중앙에 둔다. 실제 변환은 JS가 직접 쓴다. */
@@ -24,17 +67,40 @@
   transform-style: preserve-3d;
 }
 
-.flow3d__hint {
+.flow3d__hud {
   position: absolute;
   left: 12px;
   bottom: 12px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.flow3d__hud span {
   padding: 5px 10px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--panel) 80%, transparent);
-  color: var(--muted);
-  font-size: 10px;
+  background: rgba(10, 12, 20, 0.7);
   pointer-events: none;
+}
+
+.flow3d__hud button {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(10, 12, 20, 0.7);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.flow3d__hud button.is-on {
+  border-color: color-mix(in srgb, var(--running) 55%, transparent);
+  color: var(--running);
 }
 
 /* ---------- 상자 ---------- */
@@ -49,13 +115,50 @@
   cursor: pointer;
 }
 
+/* 등장 애니메이션은 여기에 건다. opacity를 쓰면 preserve-3d가 평평해지므로 scale만. */
+.n3d__body {
+  transform-style: preserve-3d;
+  animation: materialize 0.6s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+}
+
+@keyframes materialize {
+  from {
+    transform: scale3d(0.3, 0.3, 0.3);
+  }
+}
+
+/* 노드가 생길 때 퍼지는 링 — leaf 요소라 opacity를 써도 3D가 깨지지 않는다 */
+.n3d__spawn {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: var(--w);
+  height: var(--h);
+  margin-left: calc(var(--w) / -2);
+  margin-top: calc(var(--h) / -2);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  pointer-events: none;
+  animation: spawn-ring 0.85s ease-out forwards;
+}
+
+@keyframes spawn-ring {
+  from {
+    opacity: 0.9;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
 .n3d__face {
   position: absolute;
   left: 0;
   top: 0;
 }
 
-/* 앞면 = 2D 카드 그대로. 카드가 자기 크기를 갖고 있어 배경을 따로 주지 않는다. */
 .n3d__front,
 .n3d__back {
   width: var(--w);
@@ -109,28 +212,39 @@
  * 궤도를 돌려도 입체감이 유지된다. (앞면은 카드가 직접 칠한다)
  */
 .n3d__top {
-  background: color-mix(in srgb, var(--accent) 24%, #24242f);
+  background: color-mix(in srgb, var(--accent) 30%, rgba(24, 30, 44, 0.92));
+  box-shadow: inset 0 0 18px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .n3d__right {
-  background: color-mix(in srgb, var(--accent) 15%, #15151d);
+  background: color-mix(in srgb, var(--accent) 17%, rgba(14, 18, 28, 0.92));
 }
 
 .n3d__left {
-  background: color-mix(in srgb, var(--accent) 11%, #0f0f15);
+  background: color-mix(in srgb, var(--accent) 12%, rgba(10, 13, 20, 0.92));
 }
 
 .n3d__back {
-  background: color-mix(in srgb, var(--accent) 9%, #0d0d13);
+  background: color-mix(in srgb, var(--accent) 10%, rgba(9, 11, 18, 0.92));
   border-radius: 10px;
 }
 
 .n3d__bottom {
-  background: color-mix(in srgb, var(--accent) 7%, #08080c);
+  background: color-mix(in srgb, var(--accent) 8%, rgba(6, 8, 13, 0.92));
 }
 
 .n3d.is-selected .n3d__top {
-  background: color-mix(in srgb, var(--accent) 42%, #24242f);
+  background: color-mix(in srgb, var(--accent) 48%, rgba(24, 30, 44, 0.92));
+}
+
+/* 깊이 안개 — leaf 요소의 opacity라 3D를 평평하게 만들지 않는다 */
+.n3d__fog {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  background: #05060b;
+  pointer-events: none;
+  opacity: 0;
 }
 
 /* 도구 상태는 --accent를 따로 정의해 준다 (graph.css는 테두리색만 잡는다) */
@@ -141,6 +255,63 @@
 /* 3D에서는 React Flow 핸들이 필요 없다 */
 .n3d .react-flow__handle {
   display: none;
+}
+
+/* ---------- 카드의 홀로그램 재질 (3D 안에서만) ---------- */
+
+.flow3d .node--agent,
+.flow3d .node--tool {
+  position: relative;
+  background: color-mix(in srgb, var(--accent) 13%, rgba(8, 12, 20, 0.72));
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  box-shadow:
+    0 0 28px color-mix(in srgb, var(--accent) 26%, transparent),
+    inset 0 0 24px color-mix(in srgb, var(--accent) 9%, transparent);
+}
+
+.flow3d .node--agent {
+  border-left-color: var(--accent);
+}
+
+/* 카드 위 스캔라인 */
+.flow3d .node--agent::after,
+.flow3d .node--tool::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(190, 220, 255, 0.05) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* 모서리 브래킷 — HUD 느낌 */
+.flow3d .node--agent::before {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--accent), var(--accent)) left top / 11px 1.5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left top / 1.5px 11px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 11px 1.5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right top / 1.5px 11px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 11px 1.5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) left bottom / 1.5px 11px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 11px 1.5px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) right bottom / 1.5px 11px no-repeat;
+  opacity: 0.55;
+}
+
+.flow3d .node--agent[data-selected]::before {
+  opacity: 1;
+}
+
+.flow3d .node__title {
+  text-shadow: 0 0 12px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 /* ---------- 엣지 ---------- */
@@ -156,7 +327,12 @@
 }
 
 .e3d--spawn {
-  background: rgba(170, 170, 200, 0.5);
+  background: linear-gradient(
+    to right,
+    rgba(150, 190, 240, 0.15),
+    rgba(150, 190, 240, 0.6)
+  );
+  box-shadow: 0 0 8px rgba(120, 170, 240, 0.3);
 }
 
 .e3d--tool {
@@ -164,20 +340,20 @@
   margin-top: -0.5px;
   background: repeating-linear-gradient(
     to right,
-    rgba(140, 140, 170, 0.5) 0 5px,
+    rgba(150, 170, 210, 0.55) 0 5px,
     transparent 5px 10px
   );
 }
 
 .e3d--message {
-  background: rgba(110, 120, 150, 0.45);
+  background: rgba(110, 130, 170, 0.4);
 }
 
 .e3d--message.is-active {
   height: 3px;
   margin-top: -1.5px;
   background: var(--running);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--running) 60%, transparent);
+  box-shadow: 0 0 14px color-mix(in srgb, var(--running) 75%, transparent);
 }
 
 .e3d__packet {
@@ -187,8 +363,8 @@
   height: 9px;
   margin: -4.5px 0 0 -4.5px;
   border-radius: 50%;
-  background: var(--running);
-  box-shadow: 0 0 10px var(--running);
+  background: #dbeafe;
+  box-shadow: 0 0 14px var(--running), 0 0 4px #fff;
   animation: packet3d 1.2s linear infinite;
 }
 
@@ -211,15 +387,15 @@
   background:
     repeating-linear-gradient(
       to right,
-      rgba(120, 120, 150, 0.13) 0 1px,
+      rgba(120, 170, 230, 0.16) 0 1px,
       transparent 1px 120px
     ),
     repeating-linear-gradient(
       to bottom,
-      rgba(120, 120, 150, 0.13) 0 1px,
+      rgba(120, 170, 230, 0.16) 0 1px,
       transparent 1px 120px
     );
-  mask-image: radial-gradient(ellipse at center, #000 35%, transparent 78%);
+  mask-image: radial-gradient(ellipse at center, #000 32%, transparent 76%);
 }
 
 .shadow3d {
@@ -227,7 +403,7 @@
   left: 0;
   top: 0;
   border-radius: 50%;
-  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.55), transparent 70%);
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.6), transparent 70%);
   pointer-events: none;
 }
 
@@ -237,6 +413,15 @@
   top: 0;
   height: 1px;
   transform-origin: 0 50%;
-  background: rgba(150, 150, 190, 0.16);
+  background: linear-gradient(to right, rgba(140, 190, 250, 0.35), rgba(140, 190, 250, 0.05));
   pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow3d__stars,
+  .n3d__body,
+  .n3d__spawn,
+  .e3d__packet {
+    animation: none;
+  }
 }
