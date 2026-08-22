@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useRunState } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
+import { AtomOrb } from './AtomOrb'
 import { buildAtom, toThree, type AtomModel, type Body, type Pulse, type Spoke } from './atom'
 
 /**
@@ -73,7 +74,7 @@ export function AtomScene() {
         />
 
         <EffectComposer>
-          <Bloom intensity={1.35} luminanceThreshold={0.2} luminanceSmoothing={0.5} mipmapBlur />
+          <Bloom intensity={2.1} luminanceThreshold={0.12} luminanceSmoothing={0.6} mipmapBlur />
         </EffectComposer>
       </Canvas>
 
@@ -112,14 +113,24 @@ function Atom({ atom }: { atom: AtomModel }) {
         }}
       >
         {atom.nucleons.map((n, i) => (
-          <Sphere
-            key={i}
-            position={toThree(n.position, SCALE)}
-            radius={(n.kind === 'proton' ? 9 : 7.5) * SCALE}
-            color={n.kind === 'proton' ? colorOf(atom.rootStatus) : NEUTRON}
-            intensity={n.kind === 'proton' ? 2.6 : 1.1}
-          />
+          <group key={i} position={toThree(n.position, SCALE)}>
+            <Sphere
+              radius={(n.kind === 'proton' ? 9 : 7.5) * SCALE}
+              color={n.kind === 'proton' ? colorOf(atom.rootStatus) : NEUTRON}
+              intensity={n.kind === 'proton' ? 3 : 1.2}
+            />
+          </group>
         ))}
+        {atom.rootId && (
+          <AtomOrb
+            radius={(atom.nucleusRadius + 26) * SCALE}
+            color={colorOf(atom.rootStatus)}
+            intensity={0}
+            detail={1.4}
+            core={false}
+          />
+        )}
+
         {atom.rootId && (
           <Html
             position={[0, -(atom.nucleusRadius + 40) * SCALE, 0]}
@@ -171,11 +182,12 @@ function BodyNode({
         onSelect()
       }}
     >
-      <Sphere
-        radius={(isAgent ? 18 : 9) * SCALE}
+      <AtomOrb
+        radius={(isAgent ? 34 : 17) * SCALE}
         color={colorOf(String(body.status))}
-        intensity={selected ? 6 : isAgent ? 3.4 : 2.2}
+        intensity={selected ? 7 : isAgent ? 4 : 2.6}
         pulse={busy}
+        detail={isAgent ? 1 : 0.5}
       />
       <Html position={[isAgent ? 0.28 : 0.17, 0.07, 0]} distanceFactor={10} zIndexRange={[9, 0]}>
         <div className={`orb__label ${body.statusClass} orb--${body.kind}-label`}>
