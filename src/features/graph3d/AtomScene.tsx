@@ -1,5 +1,5 @@
 import { Html, Line, OrbitControls } from '@react-three/drei'
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Bloom, EffectComposer } from '@react-three/postprocessing'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -75,6 +75,7 @@ export function AtomScene() {
         <ambientLight intensity={0.45} />
         <pointLight position={[6, 8, 6]} intensity={45} color="#bcd8ff" distance={120} />
 
+        <ViewportFit />
         <Starfield />
 
         {/* 주제와 주제, 질문과 후속 질문을 잇는 결합 */}
@@ -261,6 +262,43 @@ function Atom({
       />
     </group>
   )
+}
+
+/**
+ * 사이드바가 가리는 만큼 화면을 되돌려 준다.
+ *
+ * 사이드바는 캔버스 **위에** 얹힌다 (그리드 칸으로 두면 열 때마다 WebGL 캔버스가
+ * 리사이즈되면서 화면이 통째로 흔들린다). 대신 그만큼 원자가 가려지므로,
+ * 캔버스 크기는 그대로 두고 **카메라 프러스텀만** 손본다.
+ *
+ *   zoom          가려지는 폭만큼 시야를 넓힌다 → 잘리지 않는다
+ *   setViewOffset 프러스텀을 오른쪽으로 밀면 내용은 왼쪽으로 온다
+ *                 → 남은 영역 한가운데에 놓인다
+ *
+ * OrbitControls는 카메라 위치를 만지고 여기서는 투영만 만지므로 서로 싸우지 않는다.
+ */
+function ViewportFit() {
+  const panelOpen = useViewStore((s) => s.panelOpen)
+  const panelWidth = useViewStore((s) => s.panelWidth)
+  const camera = useThree((s) => s.camera)
+  const size = useThree((s) => s.size)
+
+  useEffect(() => {
+    const cam = camera as THREE.PerspectiveCamera
+    // 패널이 화면을 다 덮는 상황에서 0으로 나누지 않도록 막는다
+    const hidden = panelOpen ? Math.min(panelWidth, size.width * 0.7) : 0
+
+    if (hidden > 0) {
+      cam.zoom = (size.width - hidden) / size.width
+      cam.setViewOffset(size.width, size.height, hidden / 2, 0, size.width, size.height)
+    } else {
+      cam.zoom = 1
+      cam.clearViewOffset()
+    }
+    cam.updateProjectionMatrix()
+  }, [camera, size.width, size.height, panelOpen, panelWidth])
+
+  return null
 }
 
 /** 오비탈 껍질을 이루는 측지선 격자 — 모서리 선 + 꼭짓점 점 */

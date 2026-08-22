@@ -76,8 +76,17 @@ export function extractRole(content: string): string | null {
   const first = content.trim().split('\n')[0]
   const bold = first.match(/^\*\*(.+?)\*\*/)
   if (!bold) return null
+
   const name = bold[1].split(/[–—:-]/)[0].trim()
-  return name.length > 0 && name.length <= 28 ? name : null
+  if (name.length === 0 || name.length > 28) return null
+
+  // 모든 굵은 머리글이 역할 이름은 아니다.
+  // "**1.  Organize the data**" 같은 목록 머리글이 에이전트 이름이 되면 안 된다.
+  if (/^\d/.test(name)) return null
+  // 사람 이름이라면 단어 서넛을 넘지 않는다
+  if (name.split(/\s+/).length > 3) return null
+
+  return name
 }
 
 

@@ -45,7 +45,7 @@ interface RunStore {
   speed: number
 
   submit: (prompt: string, options?: { newTopic?: boolean }) => Promise<void>
-  /** 새로고침 뒤, 아직 안 끝난 실행에 다시 붙는다 */
+  /** 새로고침 뒤, 아직 안 끝난 실행이나 비어 있는 턴을 다시 불러온다 */
   resume: () => void
   /** 캔버스를 다른 턴으로 옮긴다 */
   selectTurn: (id: string) => void
@@ -106,7 +106,12 @@ export const useRunStore = create<RunStore>()(
         }
       },
 
-      selectTurn: (activeId) => set({ activeId, cursor: null }),
+      selectTurn(activeId) {
+    set({ activeId, cursor: null })
+    // 옮겨 간 턴이 비어 있으면(옛 저장본) 다시 불러온다
+    const turn = activeTurn(get())
+    if (turn && turn.events.length === 0) get().resume()
+  },
 
       /**
        * 새로고침 뒤 이어받기.
@@ -163,6 +168,23 @@ export const useRunStore = create<RunStore>()(
     }),
     {
       name: 'agent-flow-thread',
+      /**
+       * 이벤트 스키마가 바뀌면 올린다.
+       *
+       * 저장된 건 도메인 상태가 아니라 **원본 이벤트**라서, 어댑터가 필드를 하나
+       * 늘리면 옛 저장본에는 그 필드가 없다. 화면에는 조용히 빈 값으로 나온다
+       * (발언 전문이 안 보이던 게 이 경우였다).
+       * 그래서 이벤트만 비우고 대화는 남긴다 — discussionId가 있으니 다시 불러오면 된다.
+       */
+      version: 1,
+      migrate: (state, from) => {
+        const s = state as { turns?: Turn[] }
+        if (from >= 1 || !s.turns) return state
+        return {
+          ...s,
+          turns: s.turns.map((t) => ({ ...t, events: [], conn: 'idle' as ConnState })),
+        }
+      },
       // 함수와 일시적인 상태는 빼고, 대화만 저장한다.
       // 커서는 저장하지 않는다 — 새로고침하면 항상 최신을 보는 게 자연스럽다.
       partialize: (s) => ({
