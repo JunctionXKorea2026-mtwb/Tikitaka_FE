@@ -1,0 +1,93 @@
+.prompt {
+  padding: 10px 16px 12px;
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+}
+
+.prompt__row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  transition: border-color 0.15s;
+}
+
+.prompt__row:focus-within {
+  border-color: color-mix(in srgb, var(--running) 55%, transparent);
+}
+
+.prompt__input {
+  flex: 1;
+  max-height: 140px;
+  padding: 4px 0;
+  border: none;
+  outline: none;
+  background: none;
+  resize: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.prompt__input::placeholder {
+  color: #5c5c6b;
+}
+
+.prompt__send {
+  flex: none;
+  padding: 7px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--running);
+  color: #fff;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.prompt__send:disabled {
+  background: #2a2a34;
+  color: #5c5c6b;
+  cursor: not-allowed;
+}
+
+.prompt__hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.prompt__mock {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.prompt__example {
+  max-width: 340px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt__example:hover {
+  color: var(--text);
+  border-color: #3a3a46;
+}
