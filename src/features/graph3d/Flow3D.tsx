@@ -1,140 +1,150 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useRunState } from '../../stores/runStore'
 import { useViewStore } from '../../stores/viewStore'
-import type { AgentNodeData, ToolNodeData } from '../graph/derive'
-import { AgentCard, ToolCard } from '../graph/nodes/cards'
-import { useFlowGraph } from '../graph/useFlowGraph'
-import { buildScene, GROUND_Y, segmentTransform, type Point3, type SceneNode } from './scene'
+import { buildAtom, segmentTransform, solvePositions, type Body, type Vec3 } from './atom'
 
 /**
- * 3D 홀로그램 뷰.
+ * 3D 홀로그램 뷰 — 실행을 원자 모형으로 보여준다.
  *
- * canvas에 다시 그리지 않고 **2D와 같은 카드 컴포넌트를 CSS 3D 공간에 세운다.**
- * 카드는 상자의 앞면이고, 나머지 다섯 면이 두께를 만든다.
- * 홀로그램 처리는 "재질"에만 적용한다 — 상태 색(running/done/error)은 정보이므로
- * 시안으로 덮지 않고 --accent가 그대로 몬다.
+ * 2D(React Flow)는 읽는 뷰, 여기는 보여주는 뷰다. 그래서 ELK 좌표를 공유하지 않고
+ * 계층을 "무엇이 무엇을 공전하는가"로 표현한다. 매핑은 atom.ts 주석 참고.
  *
- * 참고: 100,000 Stars(Chrome Experiment)도 라벨은 CSS3D로 그리고 카메라만 맞췄다.
- * 그쪽이 WebGL을 쓴 이유는 별이 10만 개였기 때문이고, 여기는 노드가 20개다.
+ * three.js를 쓰지 않는다. 100,000 Stars도 라벨은 CSS3D로 그렸고, 그쪽이 WebGL을
+ * 쓴 이유는 별이 10만 개였기 때문이다. 여기는 물체가 스무 개 남짓이다.
+ *
+ * 매 프레임 위치를 JS가 계산해 transform만 직접 쓴다 (React 재렌더 없음).
+ * 라벨은 무대 회전을 정확히 되돌려 항상 정면을 본다.
  */
 
-/** 카드 실제 크기 (graph.css의 .node--agent / .node--tool 과 일치해야 한다) */
-const CARD = {
-  agent: { w: 210, h: 88, d: 26 },
-  tool: { w: 150, h: 40, d: 16 },
-} as const
-
-const PITCH_LIMIT = Math.PI / 2 - 0.15
-/** 마지막 조작 후 자동 회전이 다시 붙기까지 */
+const PITCH_LIMIT = Math.PI / 2 - 0.12
 const IDLE_DELAY = 4000
-const SPIN_SPEED = 0.0022
+const SPIN_SPEED = 0.00035
 
 export function Flow3D() {
-  const { nodes, edges } = useFlowGraph()
-  const scene = useMemo(() => buildScene(nodes, edges), [nodes, edges])
+  const run = useRunState()
+  const atom = useMemo(() => buildAtom(run), [run])
 
   const select = useViewStore((s) => s.select)
   const selectedId = useViewStore((s) => s.selectedId)
 
   const viewportRef = useRef<HTMLDivElement>(null)
   const stageRef = useRef<HTMLDivElement>(null)
-  const cam = useRef({ yaw: -0.5, pitch: 0.38, zoom: 1 })
+  const cam = useRef({ yaw: -0.5, pitch: 0.26, zoom: 1, spinOffset: 0 })
   const [fit, setFit] = useState(1)
   const [spin, setSpin] = useState(true)
 
-  const centerRef = useRef<Point3>(scene.center)
-  centerRef.current = scene.center
+  // 프레임 루프가 참조할 최신 값들
+  const bodiesRef = useRef<Body[]>(atom.bodies)
+  bodiesRef.current = atom.bodies
   const fitRef = useRef(fit)
   fitRef.current = fit
 
-  /** 노드별 안개 스크림. 깊이에 따라 흐리게 만든다. */
-  const fogRefs = useRef(new Map<string, HTMLElement>())
-  const pointsRef = useRef(scene.nodes)
-  pointsRef.current = scene.nodes
-  const radiusRef = useRef(1)
-  radiusRef.current = Math.max(240, Math.hypot(scene.size.w, scene.size.d) / 2)
+  const orbRefs = useRef(new Map<string, HTMLElement>())
+  const ringRefs = useRef(new Map<string, HTMLElement>())
+  const labelRefs = useRef(new Map<string, HTMLElement>())
+  const pulseRefs = useRef(new Map<string, HTMLElement>())
+  const pulsesRef = useRef(atom.pulses)
+  pulsesRef.current = atom.pulses
 
-  /** 드래그 중 React를 거치지 않도록 변환을 직접 쓴다. */
-  const apply = useCallback(() => {
+  const setRef = (map: React.RefObject<Map<string, HTMLElement>>, id: string) => (el: HTMLElement | null) => {
+    if (el) map.current.set(id, el)
+    else map.current.delete(id)
+  }
+
+  /** 무대(카메라) 변환. 드래그·줌·자동회전이 모두 여기로 모인다. */
+  const applyStage = useCallback(() => {
     const el = stageRef.current
     if (!el) return
-    const { yaw, pitch, zoom } = cam.current
-    const c = centerRef.current
+    const { yaw, pitch, zoom, spinOffset } = cam.current
     const s = zoom * fitRef.current
-
     el.style.transform =
-      `scale3d(${s}, ${s}, ${s})` +
-      ` rotateX(${pitch}rad) rotateY(${yaw}rad)` +
-      ` translate3d(${-c.x}px, ${-c.y}px, ${-c.z}px)`
-
-    // CSS가 적용하는 것과 같은 회전으로 각 노드의 카메라 깊이를 구해 안개를 매긴다.
-    //   rotateY(yaw):  (x, y, z) → (x·cos + z·sin, y, −x·sin + z·cos)
-    //   rotateX(pitch): (x, y, z) → (x, y·cos − z·sin, y·sin + z·cos)
-    const cyaw = Math.cos(yaw)
-    const syaw = Math.sin(yaw)
-    const cpit = Math.cos(pitch)
-    const spit = Math.sin(pitch)
-    const radius = radiusRef.current
-
-    for (const sn of pointsRef.current) {
-      const fogEl = fogRefs.current.get(sn.id)
-      if (!fogEl) continue
-      const dx = sn.point.x - c.x
-      const dy = sn.point.y - c.y
-      const dz = sn.point.z - c.z
-      const zy = -dx * syaw + dz * cyaw
-      const depth = dy * spit + zy * cpit // 클수록 카메라에 가깝다
-      // 중심보다 뒤에 있는 것만 흐려진다. 앞쪽·중앙은 손대지 않는다.
-      const t = Math.max(0, Math.min(1, -depth / radius))
-      fogEl.style.opacity = (t * 0.6).toFixed(3)
-    }
+      `scale3d(${s}, ${s}, ${s}) rotateX(${pitch}rad) rotateY(${yaw + spinOffset}rad)`
   }, [])
 
-  // 그래프가 뷰포트에 들어오도록 배율을 맞춘다
+  useEffect(applyStage, [applyStage, fit])
+
+  // 물체 위치 + 라벨 빌보드 + 펄스 선을 매 프레임 갱신
+  useEffect(() => {
+    let raf = 0
+    let last = performance.now()
+
+    const frame = (now: number) => {
+      raf = requestAnimationFrame(frame)
+
+      if (spin && now - lastTouch.current > IDLE_DELAY) {
+        cam.current.spinOffset += (now - last) * SPIN_SPEED
+        applyStage()
+      }
+      last = now
+
+      const t = now / 1000
+      const positions = solvePositions(bodiesRef.current, t)
+
+      // 무대는 rotateX(pitch)·rotateY(yaw)를 적용한다.
+      // 라벨이 정면을 보려면 그 역인 rotateY(−yaw)·rotateX(−pitch)를 걸면 된다.
+      const { yaw, pitch, spinOffset } = cam.current
+      const billboard = `rotateY(${-(yaw + spinOffset)}rad) rotateX(${-pitch}rad)`
+
+      for (const body of bodiesRef.current) {
+        const p = positions.get(body.id)
+        const el = orbRefs.current.get(body.id)
+        if (p && el) el.style.transform = `translate3d(${p.x}px, ${p.y}px, ${p.z}px)`
+
+        const label = labelRefs.current.get(body.id)
+        if (label) label.style.transform = billboard
+
+        // 궤도선은 부모를 따라다닌다 (도구 위성은 에이전트를 공전하므로 중심이 움직인다).
+        // 회전은 solvePositions와 같다: 수평 원을 rotateX(tilt) → rotateY(ringYaw).
+        // div는 XY평면에 있으므로 먼저 눕혀야 한다 → rotateX(90 + tilt).
+        const ring = ringRefs.current.get(body.id)
+        const parent = positions.get(body.parentId ?? '@nucleus')
+        if (ring && parent) {
+          ring.style.transform =
+            `translate3d(${parent.x}px, ${parent.y}px, ${parent.z}px)` +
+            ` rotateY(${body.ringYaw}deg) rotateX(${90 + body.tilt}deg)`
+        }
+      }
+
+      const nucleusLabel = labelRefs.current.get('@nucleus')
+      if (nucleusLabel) nucleusLabel.style.transform = billboard
+
+      for (const pulse of pulsesRef.current) {
+        const el = pulseRefs.current.get(pulse.id)
+        const a = positions.get(pulse.from)
+        const b = positions.get(pulse.to)
+        if (!el || !a || !b) continue
+        const { length, transform } = segmentTransform(a as Vec3, b as Vec3)
+        el.style.width = `${length}px`
+        el.style.transform = transform
+      }
+    }
+
+    raf = requestAnimationFrame(frame)
+    return () => cancelAnimationFrame(raf)
+  }, [spin, applyStage])
+
+  // 원자 전체가 화면에 들어오도록 배율을 맞춘다
   useEffect(() => {
     const el = viewportRef.current
     if (!el) return
-
     const recompute = () => {
       const { width, height } = el.getBoundingClientRect()
-      if (width === 0 || scene.nodes.length === 0) return
-      const spanX = scene.size.w + CARD.agent.w + 160
-      const spanY = scene.size.h + scene.size.d * 0.7 + CARD.agent.h + 200
-      setFit(Math.max(0.28, Math.min(1, Math.min(width / spanX, height / spanY))))
+      if (width === 0) return
+      const span = atom.extent * 2 + 220
+      setFit(Math.max(0.25, Math.min(1.15, Math.min(width / span, height / span))))
     }
-
     const observer = new ResizeObserver(recompute)
     observer.observe(el)
     recompute()
     return () => observer.disconnect()
-  }, [scene.size.w, scene.size.h, scene.size.d, scene.nodes.length])
+  }, [atom.extent])
 
-  useEffect(apply, [apply, fit, scene.center, scene.nodes])
-
-  // ---- 유휴 시 자동 회전 ----
+  // ---- 조작 ----
 
   const lastTouch = useRef(0)
-  useEffect(() => {
-    if (!spin) return
-    let raf = 0
-    const tick = (t: number) => {
-      if (t - lastTouch.current > IDLE_DELAY) {
-        cam.current.yaw += SPIN_SPEED
-        apply()
-      }
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [spin, apply])
-
-  const touch = () => {
-    lastTouch.current = performance.now()
-  }
-
-  // ---- 드래그 회전 / 휠 줌 ----
-
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
+  const touch = () => (lastTouch.current = performance.now())
 
   const onPointerDown = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -148,16 +158,12 @@ export function Flow3D() {
     const dx = e.clientX - d.x
     const dy = e.clientY - d.y
     if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
-
     cam.current.yaw += dx * 0.006
-    cam.current.pitch = Math.max(
-      -PITCH_LIMIT,
-      Math.min(PITCH_LIMIT, cam.current.pitch + dy * 0.005),
-    )
+    cam.current.pitch = Math.max(-PITCH_LIMIT, Math.min(PITCH_LIMIT, cam.current.pitch + dy * 0.005))
     d.x = e.clientX
     d.y = e.clientY
     touch()
-    apply()
+    applyStage()
   }
 
   const onPointerUp = () => {
@@ -169,79 +175,112 @@ export function Flow3D() {
   const onWheel = (e: React.WheelEvent) => {
     cam.current.zoom = Math.max(0.35, Math.min(3, cam.current.zoom * (e.deltaY > 0 ? 0.92 : 1.08)))
     touch()
-    apply()
+    applyStage()
   }
 
-  const gridSpan = Math.max(scene.size.w, scene.size.d) + 900
+  const pick = (id: string | null) => {
+    if (suppressClick.current) {
+      suppressClick.current = false
+      return
+    }
+    select(id)
+  }
+
   const starfield = useStarfield()
 
   return (
     <div
       ref={viewportRef}
-      className="flow3d"
+      className="atom3d"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       onWheel={onWheel}
-      onClick={() => {
-        if (suppressClick.current) suppressClick.current = false
-        else select(null)
-      }}
+      onClick={() => pick(null)}
     >
-      <div className="flow3d__stars" style={{ boxShadow: starfield }} />
-      <div className="flow3d__scan" />
+      <div className="atom3d__stars" style={{ boxShadow: starfield }} />
+      <div className="atom3d__scan" />
 
-      <div ref={stageRef} className="flow3d__stage">
+      <div ref={stageRef} className="atom3d__stage">
+        {/* 핵 */}
         <div
-          className="grid3d"
-          style={{
-            width: `${gridSpan}px`,
-            height: `${gridSpan}px`,
-            marginLeft: `${-gridSpan / 2}px`,
-            marginTop: `${-gridSpan / 2}px`,
-            transform: `translate3d(${scene.center.x}px, ${GROUND_Y}px, ${scene.center.z}px) rotateX(90deg)`,
+          className={`nucleus ${atom.rootStatusClass}${selectedId === atom.rootId ? ' is-selected' : ''}`}
+          style={{ '--r': `${atom.nucleusRadius}px` } as React.CSSProperties}
+          onClick={(e) => {
+            e.stopPropagation()
+            pick(atom.rootId)
           }}
-        />
-
-        {scene.nodes.map((sn) => (
-          <Drop key={`drop-${sn.id}`} point={sn.point} isTool={sn.node.type === 'tool'} />
-        ))}
-
-        {scene.edges.map((edge) => {
-          const { length, transform } = segmentTransform(edge.from, edge.to)
-          return (
-            <div
-              key={edge.id}
-              className={`e3d e3d--${edge.kind}${edge.active ? ' is-active' : ''}`}
-              style={{ width: `${length}px`, transform }}
-            >
-              {edge.kind === 'message' && edge.active && <i className="e3d__packet" />}
+        >
+          <i className="nucleus__halo" />
+          {atom.nucleons.map((n, i) => (
+            <i
+              key={i}
+              className={`nucleon nucleon--${n.kind}`}
+              style={{ transform: `translate3d(${n.x}px, ${n.y}px, ${n.z}px)` }}
+            />
+          ))}
+          {atom.rootId && (
+            <div className="orb__label nucleus__label" ref={setRef(labelRefs, '@nucleus')}>
+              <b>{atom.rootLabel}</b>
+              <span>
+                {atom.nucleons.filter((n) => n.kind === 'proton').length}p ·{' '}
+                {atom.nucleons.filter((n) => n.kind === 'neutron').length}n
+              </span>
             </div>
-          )
-        })}
+          )}
+        </div>
 
-        {scene.nodes.map((sn) => (
-          <Box
-            key={sn.id}
-            sn={sn}
-            selected={selectedId === sn.id}
-            onSelect={(node) => {
-              if (suppressClick.current) {
-                suppressClick.current = false
-                return
-              }
-              select(node.node.type === 'tool' ? null : node.id)
-            }}
-            fogRef={(el) => {
-              if (el) fogRefs.current.set(sn.id, el)
-              else fogRefs.current.delete(sn.id)
+        {/* 궤도선 — 위치가 고정이라 CSS만으로 그린다 */}
+        {atom.bodies.map((body) => (
+          <div
+            key={`ring-${body.id}`}
+            ref={setRef(ringRefs, body.id)}
+            className={`ring ring--${body.kind} ${body.statusClass}`}
+            style={{
+              width: `${body.radius * 2}px`,
+              height: `${body.radius * 2}px`,
+              marginLeft: `${-body.radius}px`,
+              marginTop: `${-body.radius}px`,
             }}
           />
         ))}
+
+        {/* 에너지선 (에이전트 간 메시지) */}
+        {atom.pulses.map((pulse) => (
+          <div
+            key={pulse.id}
+            ref={setRef(pulseRefs, pulse.id)}
+            className={`pulse${pulse.active ? ' is-active' : ''}`}
+          >
+            {pulse.active && <i className="pulse__spark" />}
+          </div>
+        ))}
+
+        {/* 전자와 위성 */}
+        {atom.bodies.map((body) => (
+          <div
+            key={body.id}
+            ref={setRef(orbRefs, body.id)}
+            className={`orb orb--${body.kind} ${body.statusClass}${
+              selectedId === body.id ? ' is-selected' : ''
+            }`}
+            onClick={(e) => {
+              e.stopPropagation()
+              pick(body.kind === 'agent' ? body.id : null)
+            }}
+          >
+            <i className="orb__core" />
+            <i className="orb__trail" />
+            <div className="orb__label" ref={setRef(labelRefs, body.id)}>
+              <b>{body.label}</b>
+              {body.kind === 'agent' && <span>{body.status}</span>}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="flow3d__hud">
+      <div className="atom3d__hud">
         <span>드래그: 회전 · 휠: 확대 · 클릭: 선택</span>
         <button
           className={spin ? 'is-on' : undefined}
@@ -254,87 +293,6 @@ export function Flow3D() {
         </button>
       </div>
     </div>
-  )
-}
-
-/** 상자 = 2D 카드(앞면) + 두께를 만드는 다섯 면. */
-function Box({
-  sn,
-  selected,
-  onSelect,
-  fogRef,
-}: {
-  sn: SceneNode
-  selected: boolean
-  onSelect: (sn: SceneNode) => void
-  fogRef: (el: HTMLElement | null) => void
-}) {
-  const isTool = sn.node.type === 'tool'
-  const size = isTool ? CARD.tool : CARD.agent
-  const data = sn.node.data as AgentNodeData | ToolNodeData
-
-  const statusClass = isTool
-    ? `tool-${(data as ToolNodeData).status}`
-    : `status-${(data as AgentNodeData).status}`
-
-  const style = {
-    transform: `translate3d(${sn.point.x}px, ${sn.point.y}px, ${sn.point.z}px)`,
-    '--w': `${size.w}px`,
-    '--h': `${size.h}px`,
-    '--d': `${size.d}px`,
-  } as CSSProperties
-
-  return (
-    <div
-      className={`n3d ${statusClass}${selected ? ' is-selected' : ''}`}
-      style={style}
-      onClick={(e) => {
-        e.stopPropagation()
-        onSelect(sn)
-      }}
-    >
-      {/* 노드가 처음 나타날 때 퍼지는 링 — agent.started의 시각적 대응물 */}
-      <i className="n3d__spawn" />
-
-      <div className="n3d__body">
-        <div className="n3d__face n3d__back" />
-        <div className="n3d__face n3d__left" />
-        <div className="n3d__face n3d__right" />
-        <div className="n3d__face n3d__top" />
-        <div className="n3d__face n3d__bottom" />
-        <div className="n3d__face n3d__front">
-          {isTool ? (
-            <ToolCard data={data as ToolNodeData} />
-          ) : (
-            <AgentCard data={data as AgentNodeData} selected={selected} />
-          )}
-          <i className="n3d__fog" ref={fogRef} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/** 바닥 그림자 + 상자에서 내려오는 낙하선. 높이 차이를 읽게 해준다. */
-function Drop({ point, isTool }: { point: Point3; isTool: boolean }) {
-  const ground: Point3 = { x: point.x, y: GROUND_Y, z: point.z }
-  const { length, transform } = segmentTransform(point, ground)
-  const size = isTool ? CARD.tool : CARD.agent
-
-  return (
-    <>
-      <div className="drop3d" style={{ width: `${length}px`, transform }} />
-      <div
-        className="shadow3d"
-        style={{
-          width: `${size.w}px`,
-          height: `${size.d * 2.4}px`,
-          marginLeft: `${-size.w / 2}px`,
-          marginTop: `${-size.d * 1.2}px`,
-          transform: `translate3d(${ground.x}px, ${ground.y}px, ${ground.z}px) rotateX(90deg)`,
-        }}
-      />
-    </>
   )
 }
 
