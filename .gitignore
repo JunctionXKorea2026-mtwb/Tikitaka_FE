@@ -87,3 +87,4 @@ desktop.ini
 *.local
 tmp
 temp
+.env*
