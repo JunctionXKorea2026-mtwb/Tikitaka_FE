@@ -1,31 +1,70 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { rootAgent } from '../../entities/run'
-import { useRunState, useRunStore } from '../../stores/runStore'
-import { useViewStore } from '../../stores/viewStore'
+import { useRunState } from '../../stores/runStore'
+import { MAX_PANEL, MIN_PANEL, useViewStore } from '../../stores/viewStore'
 import { Inspector } from '../inspector/Inspector'
 import { ResultView } from '../result/ResultView'
 
+/**
+ * 우측 상세 패널.
+ *
+ * 항상 떠 있지 않는다 — 원자를 클릭했을 때만 열린다. 3D를 보는 동안에는
+ * 화면을 온전히 쓰고, 파고들 때만 옆에서 나온다.
+ *
+ * 너비는 왼쪽 모서리를 끌어 조절하고 저장된다.
+ */
 export function SidePanel() {
   const run = useRunState()
-  const runId = useRunStore((s) => s.activeId ?? '')
   const tab = useViewStore((s) => s.panelTab)
   const setTab = useViewStore((s) => s.setTab)
+  const closePanel = useViewStore((s) => s.closePanel)
+  const setPanelWidth = useViewStore((s) => s.setPanelWidth)
 
   const root = rootAgent(run)
   const done = root?.status === 'done' || root?.status === 'error'
 
-  // 실행이 끝나는 순간 결과 탭으로 한 번만 데려온다.
-  // (같은 실행 안에서 사용자가 다시 에이전트 탭으로 가면 그 선택을 존중)
-  const switchedFor = useRef<string | null>(null)
+  // Esc로 닫기 — 열려 있는 오버레이의 기본 기대다
   useEffect(() => {
-    if (done && switchedFor.current !== runId) {
-      switchedFor.current = runId
-      setTab('result')
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePanel()
     }
-  }, [done, runId, setTab])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [closePanel])
+
+  // 오른쪽 끝에서 포인터까지의 거리가 곧 너비다
+  const dragging = useRef(false)
+  const onPointerDown = useCallback((e: React.PointerEvent) => {
+    e.currentTarget.setPointerCapture(e.pointerId)
+    dragging.current = true
+  }, [])
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragging.current) return
+      setPanelWidth(window.innerWidth - e.clientX)
+    },
+    [setPanelWidth],
+  )
+
+  const stop = useCallback(() => {
+    dragging.current = false
+  }, [])
 
   return (
     <aside className="panel">
+      <div
+        className="panel__resize"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="사이드바 너비 조절"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={stop}
+        onPointerCancel={stop}
+        onDoubleClick={() => setPanelWidth((MIN_PANEL + MAX_PANEL) / 2)}
+      />
+
       <nav className="panel__tabs">
         <button data-active={tab === 'result' || undefined} onClick={() => setTab('result')}>
           결과
@@ -33,6 +72,9 @@ export function SidePanel() {
         </button>
         <button data-active={tab === 'agent' || undefined} onClick={() => setTab('agent')}>
           에이전트
+        </button>
+        <button className="panel__close" onClick={closePanel} title="닫기 (Esc)">
+          ✕
         </button>
       </nav>
 

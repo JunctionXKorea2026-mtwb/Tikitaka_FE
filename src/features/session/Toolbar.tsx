@@ -1,22 +1,14 @@
-import { isLiveBackend } from '../../transport'
 import { activeTurn, useRunStore } from '../../stores/runStore'
-import { useViewStore } from '../../stores/viewStore'
 
+/**
+ * 툴바는 "지금 무엇을 보고 있는가"만 말한다.
+ * 표시 옵션(차원 토글·속도·도구·배치)은 걷어냈다 — 화면이 3D 하나로 정리되면서
+ * 대부분 의미가 없어졌고, 남아 있으면 무엇이 진짜 조작인지 흐려진다.
+ */
 export function Toolbar() {
   const turn = useRunStore(activeTurn)
   const turnCount = useRunStore((s) => s.turns.length)
-  const reset = useRunStore((s) => s.reset)
-  const speed = useRunStore((s) => s.speed)
   const replay = useRunStore((s) => s.replay)
-  const setSpeed = useRunStore((s) => s.setSpeed)
-
-  const showTools = useViewStore((s) => s.showTools)
-  const toggleTools = useViewStore((s) => s.toggleTools)
-  const resetPositions = useViewStore((s) => s.resetPositions)
-  const dimension = useViewStore((s) => s.dimension)
-  const toggleDimension = useViewStore((s) => s.toggleDimension)
-
-  const hasRun = Boolean(turn)
 
   return (
     <header className="toolbar">
@@ -40,48 +32,8 @@ export function Toolbar() {
       </div>
 
       <div className="toolbar__actions">
-        <span className={`source${isLiveBackend ? ' is-live' : ''}`}>
-          {isLiveBackend ? 'API' : 'MOCK'}
-        </span>
-
-        <div className="dim" role="group" aria-label="보기 차원">
-          <button data-active={dimension === '2d' || undefined} onClick={toggleDimension}>
-            2D
-          </button>
-          <button data-active={dimension === '3d' || undefined} onClick={toggleDimension}>
-            3D
-          </button>
-        </div>
-
-        <label className="speed">
-          속도
-          <select
-            value={speed}
-            onChange={(e) => {
-              // 재생 속도는 드라이버 생성 시점에 고정되므로 바꾸면 다시 재생한다
-              setSpeed(Number(e.target.value))
-              replay()
-            }}
-          >
-            {[1, 2, 4, 8].map((s) => (
-              <option key={s} value={s}>
-                ×{s}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <button onClick={replay} disabled={!hasRun}>
+        <button onClick={replay} disabled={!turn}>
           다시 재생
-        </button>
-        <button onClick={toggleTools} aria-pressed={showTools}>
-          도구 {showTools ? '숨기기' : '보기'}
-        </button>
-        <button onClick={resetPositions} disabled={!hasRun}>
-          배치 초기화
-        </button>
-        <button onClick={reset} disabled={!hasRun}>
-          새 대화
         </button>
       </div>
     </header>

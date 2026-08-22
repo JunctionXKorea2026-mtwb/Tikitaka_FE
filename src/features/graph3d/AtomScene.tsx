@@ -238,7 +238,11 @@ function Atom({
             key={node.id}
             node={node}
             selected={selectedId === node.id}
-            onSelect={() => select(node.kind === 'agent' ? node.id : null)}
+            onSelect={() => {
+              // 에이전트를 고르면 그 턴으로 옮기고 상세를 연다
+              onSelectTurn()
+              select(node.kind === 'agent' ? node.id : null, 'agent')
+            }}
           />
         ))}
       </group>
@@ -250,8 +254,9 @@ function Atom({
         discussionId={discussionId}
         selected={selectedId === atom.rootId}
         onSelect={() => {
+          // 핵은 질문 그 자체 — 그 턴의 결과를 보여준다
           onSelectTurn()
-          select(atom.rootId)
+          select(atom.rootId, 'result')
         }}
       />
     </group>

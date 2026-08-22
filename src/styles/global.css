@@ -44,16 +44,18 @@ body {
   height: 100%;
 }
 
+/*
+ * 사이드바는 원자를 클릭했을 때만 열린다.
+ * 닫혀 있으면 캔버스가 화면을 다 쓴다.
+ */
 .app__body {
   display: grid;
-  grid-template-columns: 1fr clamp(360px, 30vw, 460px);
+  grid-template-columns: 1fr;
   min-height: 0;
 }
 
-@media (max-width: 1100px) {
-  .app__body {
-    grid-template-columns: 1fr 340px;
-  }
+.app__body[data-panel] {
+  grid-template-columns: 1fr var(--panel-w, 400px);
 }
 
 .app__canvas {

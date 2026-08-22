@@ -1,9 +1,59 @@
 .panel {
+  position: relative;
   display: grid;
   grid-template-rows: auto 1fr;
   min-height: 0;
   background: var(--panel);
   border-left: 1px solid var(--line);
+  animation: panel-in 0.18s ease-out;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+}
+
+/* 왼쪽 모서리를 끌어 너비를 조절한다 (더블클릭하면 가운데 값으로) */
+.panel__resize {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.panel__resize::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: transparent;
+  transition: background 0.15s;
+}
+
+.panel__resize:hover::after,
+.panel__resize:active::after {
+  background: var(--running);
+}
+
+.panel__close {
+  margin-left: auto;
+  align-self: center;
+  padding: 4px 8px !important;
+  border-bottom: none !important;
+  color: var(--muted);
+  font-size: 11px !important;
+}
+
+.panel__close:hover {
+  color: var(--text);
 }
 
 .panel__tabs {

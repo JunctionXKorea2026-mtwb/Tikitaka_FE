@@ -1,8 +1,9 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 import type { AgentEvent } from '../entities/event'
 import { reduceEvents } from '../entities/reduce'
 import { emptyRun, type RunState } from '../entities/run'
-import { createDriver, createRun, type RunDriver } from '../transport'
+import { createDriver, createRun, isLiveBackend, type RunDriver } from '../transport'
 
 export type ConnState = 'idle' | 'connecting' | 'streaming' | 'done' | 'error'
 
@@ -44,6 +45,8 @@ interface RunStore {
   speed: number
 
   submit: (prompt: string, options?: { newTopic?: boolean }) => Promise<void>
+  /** 새로고침 뒤, 아직 안 끝난 실행에 다시 붙는다 */
+  resume: () => void
   /** 캔버스를 다른 턴으로 옮긴다 */
   selectTurn: (id: string) => void
   /** 활성 턴을 처음부터 다시 재생 */
@@ -59,105 +62,144 @@ let driver: RunDriver | null = null
 
 const newThreadId = () => `thread-${Date.now().toString(36)}`
 
-export const useRunStore = create<RunStore>((set, get) => ({
-  threadId: newThreadId(),
-  turns: [],
-  activeId: null,
-  submitting: false,
-  cursor: null,
-  speed: 1,
-
-  async submit(prompt, options) {
-    const trimmed = prompt.trim()
-    if (!trimmed) return
-
-    set({ submitting: true })
-    try {
-      const { threadId, turns, speed, activeId } = get()
-      // 이어서 물으면 "지금 보고 있는 턴"에 붙는다 — 과거 턴을 골라두면 거기서 갈라진다
-      const parentId = options?.newTopic ? null : activeId
-      const runId = await createRun(trimmed, threadId, turns.length, parentId)
-
-      // 이전 스트림은 멈춘다. 받은 이벤트는 그 턴에 그대로 남는다.
-      driver?.stop()
-
-      const turn: Turn = {
-        id: runId,
-        parentId,
-        prompt: trimmed,
-        title: '',
-        events: [],
-        conn: 'connecting',
-      }
-      set((s) => ({ turns: [...s.turns, turn], activeId: runId, cursor: null }))
-
-      driver = createDriver(runId, speed)
-      driver.start({
-        onOpen: (meta) => patch(set, runId, { title: meta.title, conn: 'streaming' }),
-        onEvent: (event) =>
-          set((s) => ({
-            turns: s.turns.map((t) =>
-              t.id === runId ? { ...t, events: [...t.events, event] } : t,
-            ),
-          })),
-        onDone: () => patch(set, runId, { conn: 'done' }),
-        onError: (err) => patch(set, runId, { conn: 'error', error: err.message }),
-      })
-    } catch (err) {
-      set({ submitting: false })
-      throw err instanceof Error ? err : new Error(String(err))
-    } finally {
-      set({ submitting: false })
-    }
-  },
-
-  selectTurn: (activeId) => set({ activeId, cursor: null }),
-
-  replay() {
-    const turn = activeTurn(get())
-    if (!turn) return
-
-    driver?.stop()
-    set((s) => ({
-      turns: s.turns.map((t) => (t.id === turn.id ? { ...t, events: [], conn: 'connecting' } : t)),
+export const useRunStore = create<RunStore>()(
+  persist(
+    (set, get) => ({
+      threadId: newThreadId(),
+      turns: [],
+      activeId: null,
+      submitting: false,
       cursor: null,
-    }))
+      speed: 1,
 
-    driver = createDriver(turn.id, get().speed)
-    driver.start({
-      onOpen: (meta) => patch(set, turn.id, { title: meta.title, conn: 'streaming' }),
-      onEvent: (event) =>
+      async submit(prompt, options) {
+        const trimmed = prompt.trim()
+        if (!trimmed) return
+
+        set({ submitting: true })
+        try {
+          const { threadId, turns, speed, activeId } = get()
+          // 이어서 물으면 "지금 보고 있는 턴"에 붙는다 — 과거 턴을 골라두면 거기서 갈라진다
+          const parentId = options?.newTopic ? null : activeId
+          const runId = await createRun(trimmed, threadId, turns.length, parentId)
+
+          // 이전 스트림은 멈춘다. 받은 이벤트는 그 턴에 그대로 남는다.
+          driver?.stop()
+
+          const turn: Turn = {
+            id: runId,
+            parentId,
+            prompt: trimmed,
+            title: '',
+            events: [],
+            conn: 'connecting',
+          }
+          set((s) => ({ turns: [...s.turns, turn], activeId: runId, cursor: null }))
+
+          driver = createDriver(runId, speed)
+          driver.start(handlersFor(set, runId))
+        } catch (err) {
+          set({ submitting: false })
+          throw err instanceof Error ? err : new Error(String(err))
+        } finally {
+          set({ submitting: false })
+        }
+      },
+
+      selectTurn: (activeId) => set({ activeId, cursor: null }),
+
+      /**
+       * 새로고침 뒤 이어받기.
+       *
+       * discussionId를 저장해 두므로 서버에서 계속 돌고 있던 토론에 다시 붙을 수 있다.
+       * mock 모드는 시나리오가 메모리에만 있어서 이어받을 수 없다 — 끝난 것으로 표시한다.
+       */
+      resume() {
+        const turn = activeTurn(get())
+        if (!turn || isSettledConn(turn.conn)) return
+
+        if (!isLiveBackend) {
+          patch(set, turn.id, { conn: 'done' })
+          return
+        }
+
+        driver?.stop()
+        // 이미 받아둔 이벤트는 버린다. 폴링은 매번 전체를 다시 만들어 보내므로
+        // 남겨두면 중복된다.
         set((s) => ({
-          turns: s.turns.map((t) =>
-            t.id === turn.id ? { ...t, events: [...t.events, event] } : t,
-          ),
-        })),
-      onDone: () => patch(set, turn.id, { conn: 'done' }),
-      onError: (err) => patch(set, turn.id, { conn: 'error', error: err.message }),
-    })
-  },
+          turns: s.turns.map((t) => (t.id === turn.id ? { ...t, events: [], conn: 'connecting' } : t)),
+        }))
+        driver = createDriver(turn.id, get().speed)
+        driver.start(handlersFor(set, turn.id))
+      },
 
-  reset() {
-    driver?.stop()
-    driver = null
-    set({ threadId: newThreadId(), turns: [], activeId: null, cursor: null })
-  },
+      replay() {
+        const turn = activeTurn(get())
+        if (!turn) return
 
-  disconnect() {
-    driver?.stop()
-    driver = null
-  },
+        driver?.stop()
+        set((s) => ({
+          turns: s.turns.map((t) => (t.id === turn.id ? { ...t, events: [], conn: 'connecting' } : t)),
+          cursor: null,
+        }))
 
-  setCursor: (cursor) => set({ cursor }),
-  setSpeed: (speed) => set({ speed }),
-}))
+        driver = createDriver(turn.id, get().speed)
+        driver.start(handlersFor(set, turn.id))
+      },
+
+      reset() {
+        driver?.stop()
+        driver = null
+        set({ threadId: newThreadId(), turns: [], activeId: null, cursor: null })
+      },
+
+      disconnect() {
+        driver?.stop()
+        driver = null
+      },
+
+      setCursor: (cursor) => set({ cursor }),
+      setSpeed: (speed) => set({ speed }),
+    }),
+    {
+      name: 'agent-flow-thread',
+      // 함수와 일시적인 상태는 빼고, 대화만 저장한다.
+      // 커서는 저장하지 않는다 — 새로고침하면 항상 최신을 보는 게 자연스럽다.
+      partialize: (s) => ({
+        threadId: s.threadId,
+        // 너무 길어지면 localStorage 한도(약 5MB)에 걸린다
+        turns: s.turns.slice(-MAX_STORED_TURNS),
+        activeId: s.activeId,
+        speed: s.speed,
+      }),
+    },
+  ),
+)
+
+/** localStorage에 남겨둘 최대 턴 수 */
+const MAX_STORED_TURNS = 30
+
+const isSettledConn = (conn: ConnState) => conn === 'done' || conn === 'error'
+
+/** 드라이버 콜백. submit·replay·resume이 같은 걸 쓴다. */
+function handlersFor(set: SetFn, runId: string) {
+  return {
+    onOpen: (meta: { runId: string; title: string }) =>
+      patch(set, runId, { title: meta.title, conn: 'streaming' as ConnState }),
+    onEvent: (event: AgentEvent) =>
+      set((s) => ({
+        turns: s.turns.map((t) => (t.id === runId ? { ...t, events: [...t.events, event] } : t)),
+      })),
+    onDone: () => patch(set, runId, { conn: 'done' as ConnState }),
+    onError: (err: Error) =>
+      patch(set, runId, { conn: 'error' as ConnState, error: err.message }),
+  }
+}
+
+type SetFn = (fn: (s: RunStore) => Partial<RunStore>) => void
 
 /** 특정 턴의 필드만 갱신한다 (스트림 콜백이 늦게 도착해도 다른 턴을 건드리지 않는다) */
-function patch(
-  set: (fn: (s: RunStore) => Partial<RunStore>) => void,
-  runId: string,
-  fields: Partial<Turn>,
-) {
+function patch(set: SetFn, runId: string, fields: Partial<Turn>) {
   set((s) => ({ turns: s.turns.map((t) => (t.id === runId ? { ...t, ...fields } : t)) }))
 }
 
