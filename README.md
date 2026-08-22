@@ -177,60 +177,81 @@ mock 모드에서는 후속 질문의 파이프라인이 짧아진다 (`Refiner`
 
 ## 백엔드 붙이기
 
+실제 백엔드는 **Aigo Squad Discussion API**다. 스쿼드(에이전트 팀)가 토픽을 두고 토론한다.
+
 `.env`:
 
 ```
-VITE_API_URL=http://localhost:8000
+VITE_API_URL=/backend
+VITE_BACKEND_ORIGIN=https://xxxx.ngrok-free.app
+VITE_SQUAD_ID=77c7ba94-fa87-4b2b-b7cc-f7b01540cd8a
 ```
 
-이것만 넣으면 `transport/index.ts`가 `sseDriver`를 고른다. 앱 코드는 한 줄도 안 바뀐다.
+비워두면 프롬프트에서 시나리오를 생성해 재생한다 (백엔드 불필요).
 
-### 1) 실행 생성 — `POST {VITE_API_URL}/runs`
-
-하단 입력 바에서 요청을 보내면 호출된다.
+### 엔드포인트
 
 ```
-요청:  { "prompt": "2023년이랑 비교해줘", "threadId": "thread-x91",
-         "turn": 1, "parentRunId": "run-3c0a" }
-응답:  { "runId": "run-7f3a" }
+POST /api/ask                   { topic, squad_id }  ->  { discussionId }
+GET  /api/discussion/{id}       { discussionInfo, conclusion, transcript }
 ```
 
-`threadId`가 작업 공간을 묶고, `parentRunId`가 맥락의 갈래를 정한다.
-값이 있으면 그 실행에 이어지는 후속 질문이고, `null`이면 같은 스레드 안의 새 주제다.
+**스트림이 아니라 폴링이다.** `discussionDriver`가 1.5초마다 전체를 가져와
+이벤트로 변환하고 **새로 늘어난 꼬리만** 흘려보낸다. 앱 입장에서는 스트림과 구분되지 않는다.
 
-mock 모드에서는 `transport/scenario.ts`가 프롬프트에서 실행 시나리오를 만들어 메모리에 담고
-그 id를 돌려준다. 프롬프트에서 검색어를 뽑아내고 길이·키워드로 파이프라인 모양을 고른다.
+### 매핑 (`transport/discussion.ts`)
 
-| 조건 | 파이프라인 |
+| 백엔드 | 프론트 |
 |---|---|
-| 실패/에러/장애 키워드 | orchestrator → fetcher(503) → cache fallback |
-| 16자 미만 | orchestrator → worker |
-| 그 외 | orchestrator → researcher → analyst → (40자 초과면 critic) → writer |
+| discussion | 실행 하나 (3D에서 원자 하나) |
+| topic | 핵 = 질문 |
+| messages[].author | 에이전트 (안쪽 오비탈) |
+| messages[] | 발언 → 에너지선 + 사고 요약 |
+| tokenUsage | 토큰 집계 |
+| conclusion | 최종 답변 (summary + keyPoints + decisions + actionItems) |
+| status running / awaitingUser | streaming / done |
 
-시뮬레이션이 없는 사실을 지어내지 않도록, 최종 답변은 목업임을 밝히고
-어떤 파이프라인이 돌았는지만 요약한다.
+에이전트 이름은 API가 주지 않는다 (`agent-1787388204963-rc70obw`). 발언 첫 줄의
+`**Planner – ...**` 에서 뽑아 쓴다 (`extractRole`).
 
-### 2) 이벤트 스트림 — `GET {VITE_API_URL}/runs/{runId}/stream` (text/event-stream)
+**이 API에는 도구 호출이 없다.** 그래서 바깥 오비탈은 비어 있다. 억지로 채우지 않는다 —
+없는 걸 있는 것처럼 그리면 화면이 거짓말을 한다.
 
+### 접두 안정성
+
+폴링이 "꼬리만 보내기"로 성립하려면 `discussionToEvents`가 **접두 안정적**이어야 한다.
+같은 입력의 앞부분은 몇 번을 변환해도 같은 이벤트를 내야 한다. 그래서:
+
+- 에이전트는 **처음 발언할 때** 등장시킨다. participants[]로 미리 만들면 이름을 모르는
+  상태로 만들어지고, 나중에 발언해도 라벨이 굳는다 (이미 보낸 이벤트는 못 고친다)
+- 발언 흐름은 **직전 발언자 → 지금 발언자**로 그린다. 뒤를 보면 다음 발언이 도착할 때
+  값이 바뀐다
+- 종료 이벤트는 전부 마지막 시각에 몰아넣는다. 각자 마지막 발언 시각에 두면
+  타임스탬프가 역행한다
+
+### CORS — 백엔드에 필요한 것
+
+백엔드에 CORS가 없다 (`Access-Control-Allow-Origin` 없음, `OPTIONS` 405).
+브라우저에서 직접 부르면 전부 차단된다. 지금은 **프록시로 우회**한다 —
+개발은 `vite.config.ts`, 배포는 `vercel.json`의 rewrites가 `/backend/*`를 넘겨준다.
+
+FastAPI라면 이걸로 해결된다:
+
+```python
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(CORSMiddleware, allow_origins=["*"],
+                   allow_methods=["*"], allow_headers=["*"])
 ```
-event: meta
-data: {"runId":"run-7f3a","title":"전기차 시장 조사"}
 
-event: agent
-data: {"type":"agent.started","ts":0.0,"agentId":"orchestrator","label":"Orchestrator","role":"orchestrator"}
+열리면 `VITE_API_URL`에 절대 주소를 바로 넣으면 된다. 앱 코드는 그대로다.
 
-event: agent
-data: {"type":"tool.called","ts":3.0,"agentId":"researcher","callId":"c1","toolName":"web_search","input":{...}}
+### 아직 없는 것
 
-event: done
-data: {}
-```
-
-`data`에 담기는 객체는 `src/entities/event.ts`의 `AgentEvent` 유니온 그대로다.
-named event 없이 그냥 `data:`만 흘려보내도 `onmessage`가 받는다.
-
-WebSocket이면 `sseDriver.ts`를 참고해 `wsDriver.ts`를 하나 더 만들고
-`transport/index.ts`의 분기만 고치면 된다.
+**후속 질문을 이어갈 방법이 없다.** `/api/ask`만 있어서 후속 질문도 새 토론이 되고,
+백엔드 쪽 맥락은 이어지지 않는다 (프론트의 대화 구조만 유지된다).
+`status: awaitingUser`가 있는 걸 보면 이어가기가 설계에는 있는 듯하니,
+`POST /api/discussion/{id}/reply` 같은 엔드포인트가 생기면
+`transport/index.ts`의 `createRun`에서 `parentRunId`로 분기하면 된다.
 
 ### 이벤트 종류
 

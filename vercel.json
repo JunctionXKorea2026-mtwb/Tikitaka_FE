@@ -3,5 +3,11 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "installCommand": "npm ci"
+  "installCommand": "npm ci",
+  "rewrites": [
+    {
+      "source": "/backend/:path*",
+      "destination": "https://615d-117-111-17-172.ngrok-free.app/:path*"
+    }
+  ]
 }

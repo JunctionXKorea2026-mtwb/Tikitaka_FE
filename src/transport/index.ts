@@ -1,12 +1,15 @@
 import type { RunFixture } from '../entities/event'
+import { createDiscussionDriver } from './discussionDriver'
 import { createMockDriver } from './mockDriver'
 import { buildScenario } from './scenario'
-import { createSseDriver } from './sseDriver'
 import type { RunDriver } from './types'
 
 export type { RunDriver, DriverHandlers } from './types'
 
 const API_URL = import.meta.env.VITE_API_URL as string | undefined
+/** 토론에 투입할 스쿼드. 백엔드 기본값을 그대로 쓴다. */
+const SQUAD_ID =
+  (import.meta.env.VITE_SQUAD_ID as string | undefined) ?? '77c7ba94-fa87-4b2b-b7cc-f7b01540cd8a'
 
 export const isLiveBackend = Boolean(API_URL)
 
@@ -30,16 +33,24 @@ export async function createRun(
   parentRunId: string | null = null,
 ): Promise<string> {
   if (API_URL) {
-    const res = await fetch(`${API_URL}/runs`, {
+    // Aigo Squad Discussion API — POST /api/ask { topic, squad_id } → { discussionId }
+    //
+    // 이 API에는 스레드·부모 개념이 없다. 후속 질문도 새 토론이 되므로
+    // 백엔드 쪽 맥락은 이어지지 않는다 (프론트의 대화 구조만 유지된다).
+    // 백엔드에 이어가기 엔드포인트가 생기면 여기서 parentRunId를 넘기면 된다.
+    const res = await fetch(`${API_URL}/api/ask`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt, threadId, turn, parentRunId }),
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
+      body: JSON.stringify({ topic: prompt, squad_id: SQUAD_ID }),
     })
-    if (!res.ok) throw new Error(`실행 생성 실패: ${res.status} ${res.statusText}`)
-    const { runId } = (await res.json()) as { runId: string }
-    return runId
+    if (!res.ok) throw new Error(`토론 생성 실패: ${res.status} ${res.statusText}`)
+
+    const data = (await res.json()) as { discussionId?: string }
+    if (!data.discussionId) throw new Error('응답에 discussionId가 없습니다')
+    return data.discussionId
   }
 
+  void threadId
   const runId = `mock-${Date.now().toString(36)}-${turn}`
   scenarios.set(runId, buildScenario(runId, prompt, parentRunId !== null))
   return runId
@@ -52,7 +63,7 @@ export async function createRun(
  * 있으면 실제 SSE 스트림. 나머지 코드는 아무것도 바뀌지 않는다.
  */
 export function createDriver(runId: string, speed = 1): RunDriver {
-  if (API_URL) return createSseDriver(API_URL, runId)
+  if (API_URL) return createDiscussionDriver(API_URL, runId)
 
   const fixture = scenarios.get(runId)
   if (!fixture) {
