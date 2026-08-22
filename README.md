@@ -41,7 +41,7 @@ src/
 ├─ stores/            runStore(도메인) / viewStore(선택·좌표 오버라이드·필터·차원)
 └─ features/
    ├─ graph/          2D — FlowCanvas, derive, layout/elk, nodes/, edges/, CanvasEmpty
-   ├─ graph3d/        3D — atom(원자 모형·궤도 수학), Flow3D (CSS 3D, 의존성 없음)
+   ├─ graph3d/        3D — atom(원자 모형·궤도 수학), AtomScene(three.js), Flow3D(lazy)
    ├─ prompt/         하단 요청 입력 바 (Enter 전송 / Shift+Enter 줄바꿈)
    ├─ panel/          우측 탭 패널 셸 (결과 ↔ 에이전트)
    ├─ result/         요청↔답변 뷰 + 크게 보기 오버레이
