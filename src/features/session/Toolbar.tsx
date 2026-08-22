@@ -12,6 +12,8 @@ export function Toolbar() {
   const showTools = useViewStore((s) => s.showTools)
   const toggleTools = useViewStore((s) => s.toggleTools)
   const resetPositions = useViewStore((s) => s.resetPositions)
+  const dimension = useViewStore((s) => s.dimension)
+  const toggleDimension = useViewStore((s) => s.toggleDimension)
 
   const hasRun = Boolean(runId)
 
@@ -29,6 +31,15 @@ export function Toolbar() {
         <span className={`source${isLiveBackend ? ' is-live' : ''}`}>
           {isLiveBackend ? 'API' : 'MOCK'}
         </span>
+
+        <div className="dim" role="group" aria-label="보기 차원">
+          <button data-active={dimension === '2d' || undefined} onClick={toggleDimension}>
+            2D
+          </button>
+          <button data-active={dimension === '3d' || undefined} onClick={toggleDimension}>
+            3D
+          </button>
+        </div>
 
         <label className="speed">
           속도

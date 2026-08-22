@@ -1,0 +1,29 @@
+.flow3d {
+  position: absolute;
+  inset: 0;
+}
+
+.flow3d__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: grab;
+  touch-action: none;
+}
+
+.flow3d__canvas:active {
+  cursor: grabbing;
+}
+
+.flow3d__hint {
+  position: absolute;
+  left: 12px;
+  bottom: 12px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--muted);
+  font-size: 10px;
+  pointer-events: none;
+}

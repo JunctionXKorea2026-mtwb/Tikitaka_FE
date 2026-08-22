@@ -153,6 +153,32 @@ body {
   color: var(--muted);
 }
 
+/* 2D / 3D 세그먼트 토글 */
+.dim {
+  display: flex;
+  padding: 2px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+
+.dim button {
+  padding: 4px 12px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.dim button[data-active] {
+  background: var(--running);
+  color: #fff;
+}
+
 .banner {
   position: absolute;
   z-index: 5;

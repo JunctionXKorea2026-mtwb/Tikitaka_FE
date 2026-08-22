@@ -38,9 +38,10 @@ nodes[] / edges[]           좌표는 아직 없음
 src/
 ├─ entities/          도메인 — event(백엔드 계약) / run(상태) / reduce(순수 리듀서)
 ├─ transport/         드라이버 추상화 — scenario(프롬프트→시나리오), mockDriver, sseDriver
-├─ stores/            runStore(도메인) / viewStore(선택·좌표 오버라이드·필터)
+├─ stores/            runStore(도메인) / viewStore(선택·좌표 오버라이드·필터·차원)
 └─ features/
-   ├─ graph/          FlowCanvas, derive, layout/elk, nodes/, edges/, CanvasEmpty
+   ├─ graph/          2D — FlowCanvas, derive, layout/elk, nodes/, edges/, CanvasEmpty
+   ├─ graph3d/        3D — projection, scene, Flow3D (canvas 직접 렌더, 의존성 없음)
    ├─ prompt/         하단 요청 입력 바 (Enter 전송 / Shift+Enter 줄바꿈)
    ├─ panel/          우측 탭 패널 셸 (결과 ↔ 에이전트)
    ├─ result/         요청↔답변 뷰 + 크게 보기 오버레이
@@ -62,6 +63,23 @@ src/
 **3. 메시지 엣지는 레이아웃에서 제외한다**
 `researcher → orchestrator` 같은 응답 메시지가 그래프에 사이클을 만들고, ELK가 사이클을
 끊으면서 부모가 자식 오른쪽으로 밀린다. 계층은 구조 엣지로만 잡고 메시지는 그 위에 그린다.
+
+## 2D / 3D 토글
+
+툴바의 `2D | 3D`로 전환한다. **같은 ELK 레이아웃 좌표를 공유**하므로 두 뷰가 항상 같은
+그래프를 보여준다. 3D에서 축을 다시 배정할 뿐이다.
+
+```
+ELK x  →  X   파이프라인 진행 방향 (좌 → 우)
+ELK y  →  Z   형제 노드가 퍼지는 깊이 축
+   —   →  Y   에이전트는 평면(0), 도구는 그 아래(150)
+```
+
+3D는 three.js 없이 `canvas` 2D에 직접 투영한다 (`graph3d/projection.ts`). 노드가 20개
+남짓이라 궤도 회전(yaw/pitch)과 원근 투영이면 충분하고, 번들이 늘지 않는다.
+그리기 순서는 페인터 알고리즘 — 엣지와 노드를 한 목록에 섞어 깊이 역순으로 정렬한다.
+
+조작: 드래그 회전 · 휠 확대 · 클릭 선택 (선택은 2D와 공유되어 인스펙터가 함께 따라간다).
 
 ## 요청과 최종 답변
 
