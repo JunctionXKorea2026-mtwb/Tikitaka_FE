@@ -21,9 +21,6 @@ export async function summarizeResultFor(result: string): Promise<string | null>
 }
 
 const API_URL = import.meta.env.VITE_API_URL as string | undefined
-/** 토론에 투입할 스쿼드. 백엔드 기본값을 그대로 쓴다. */
-const SQUAD_ID =
-  (import.meta.env.VITE_SQUAD_ID as string | undefined) ?? '77c7ba94-fa87-4b2b-b7cc-f7b01540cd8a'
 
 export const isLiveBackend = Boolean(API_URL)
 
@@ -57,7 +54,10 @@ export async function createRun(
   parentRunId: string | null = null,
 ): Promise<string> {
   if (API_URL) {
-    // Aigo Squad Discussion API — POST /api/ask { topic, squad_id } → { discussionId }
+    // Aigo Squad Discussion API — POST /api/ask { topic } → { discussionId }
+    //
+    // squad_id는 보내지 않는다. 스펙상 선택 항목이고 서버가 기본값을 갖고 있다.
+    // 스쿼드가 여러 개가 되면 그때는 전역 설정이 아니라 턴마다 갖는 값으로 들어와야 한다.
     //
     // 이 API에는 스레드·부모 개념이 없다. 후속 질문도 새 토론이 되므로
     // 백엔드 쪽 맥락은 이어지지 않는다 (프론트의 대화 구조만 유지된다).
@@ -65,7 +65,7 @@ export async function createRun(
     const res = await fetch(`${API_URL}/api/ask`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': '1' },
-      body: JSON.stringify({ topic: prompt, squad_id: SQUAD_ID }),
+      body: JSON.stringify({ topic: prompt }),
     })
     if (!res.ok) {
       // 백엔드는 400짜리 사유를 500 본문에 담아 보낸다. 그 문장이 제일 쓸모 있다.

@@ -90,7 +90,6 @@ export function extractRole(content: string): string | null {
 }
 
 
-const ROOT = 'discussion'
 
 /**
  * 토론 페이로드를 이벤트 스트림으로 변환한다.
@@ -102,6 +101,15 @@ const ROOT = 'discussion'
 export function discussionToEvents(payload: DiscussionPayload): AgentEvent[] {
   const info = payload.discussionInfo
   const events: AgentEvent[] = []
+
+  /*
+   * 핵(루트)의 id는 **실제 discussionId**를 쓴다.
+   *
+   * 'discussion' 같은 고정 문자열을 쓰면 모든 턴의 루트가 같은 id를 갖게 되고,
+   * 원자 하나를 고르면 화면의 원자가 전부 선택 표시된다.
+   * id가 곧 그 실행이므로 실제 값을 쓰는 게 맞다.
+   */
+  const ROOT = info.id
 
   const t0 = Date.parse(info.createdAt)
   const at = (iso: string) => {

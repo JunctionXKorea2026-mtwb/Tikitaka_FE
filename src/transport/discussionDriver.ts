@@ -51,7 +51,12 @@ export function createDiscussionDriver(apiUrl: string, discussionId: string): Ru
           const info = payload.discussionInfo
           if (!opened) {
             opened = true
-            h.onOpen({ runId: info.id, title: info.topic })
+            const createdAt = Date.parse(info.createdAt)
+            h.onOpen({
+              runId: info.id,
+              title: info.topic,
+              createdAt: Number.isFinite(createdAt) ? createdAt : undefined,
+            })
           }
 
           const events = discussionToEvents(payload)

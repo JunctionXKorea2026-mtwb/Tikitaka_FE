@@ -325,7 +325,8 @@ function Atom({
         target={target}
         title={title}
         discussionId={discussionId}
-        selected={selectedId === atom.rootId}
+        // 활성 턴에서만 선택을 표시한다 (id가 겹칠 여지를 아예 없앤다)
+        selected={active && selectedId === atom.rootId}
         onSelect={() => {
           if (guard.current) return
           // 핵은 질문 그 자체 — 그 턴의 결과를 보여준다

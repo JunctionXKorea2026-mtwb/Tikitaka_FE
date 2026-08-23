@@ -22,7 +22,20 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   // 펼침은 여기서 관리한다. 카드를 누르면 접히고 펼쳐질 뿐,
   // 캔버스가 다른 대화로 튀지 않는다 — 화면이 흔들리는 게 제일 거슬리는 동작이라
   // "보러 가기"는 별도 버튼으로 뗐다.
+  const select = useViewStore((s) => s.select)
+  const [query, setQuery] = useState('')
   const [openIds, setOpenIds] = useState<string[]>(() => (activeId ? [activeId] : []))
+
+  /**
+   * 캔버스를 그 턴으로 옮기면서 **원자도 함께 고른다.**
+   *
+   * 루트 에이전트의 id가 곧 그 실행의 id라서 (discussionId / runId)
+   * turn.id 를 그대로 넘기면 3D의 핵이 선택된다 — 목록과 원자가 같은 것을 가리킨다.
+   */
+  const goTo = (id: string) => {
+    selectTurn(id)
+    select(id, 'result')
+  }
   // 만들어진 순서가 아니라 트리 순서 — 후속 질문은 부모 바로 아래 온다
   const arranged = arrangeTurns(turns)
   const toggle = (id: string) =>
@@ -39,10 +52,32 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
   }
 
   // 확대 보기에서는 활성 턴 하나만 크게
-  const list = expanded ? arranged.filter((a) => a.turn.id === activeId) : arranged
+  const all = expanded ? arranged.filter((a) => a.turn.id === activeId) : arranged
+  const list = query.trim() ? all.filter((a) => matches(a.turn, query)) : all
 
   return (
     <div className={`result${expanded ? ' result--expanded' : ''}`}>
+      {!expanded && turns.length > 1 && (
+        <div className="result__search">
+          <input
+            type="search"
+            value={query}
+            placeholder="질문·답변 검색"
+            onChange={(e) => setQuery(e.target.value)}
+          />
+          {query.trim() && (
+            <span className="result__hits">
+              {list.length}건
+              <button onClick={() => setQuery('')}>지우기</button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {list.length === 0 && (
+        <p className="result__idle">"{query}" 와 맞는 대화가 없습니다.</p>
+      )}
+
       {list.map(({ turn, number, depth }) => (
         <TurnCard
           key={turn.id}
@@ -53,7 +88,7 @@ export function ResultView({ expanded = false }: { expanded?: boolean }) {
           expanded={expanded}
           open={expanded || openIds.includes(turn.id)}
           onToggle={() => toggle(turn.id)}
-          onSelect={() => selectTurn(turn.id)}
+          onSelect={() => goTo(turn.id)}
           onExpand={() => setResultExpanded(true)}
         />
       ))}
@@ -104,6 +139,11 @@ function TurnCard({
           </span>
         </button>
 
+        {turn.createdAt > 0 && (
+          <time className="turn__time" dateTime={new Date(turn.createdAt).toISOString()}>
+            {formatTime(turn.createdAt)}
+          </time>
+        )}
         {!expanded && !active && (
           <button className="turn__goto" onClick={onSelect} title="이 대화를 캔버스에서 보기">
             보기
@@ -249,6 +289,35 @@ function Stat({ label, value, warn }: { label: string; value: string; warn?: boo
       <dd className={warn ? 'is-warn' : undefined}>{value}</dd>
     </div>
   )
+}
+
+/** 질문·요약·답변 어디에 걸려도 찾는다 */
+function matches(turn: Turn, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  const answer = runStateOf(turn)
+  const haystack = [
+    turn.prompt,
+    turn.titleSummary ?? '',
+    turn.resultSummary ?? '',
+    turn.id,
+    ...Object.values(answer.agents).map((a) => `${a.label} ${a.result ?? ''}`),
+  ]
+  return haystack.join('\n').toLowerCase().includes(q)
+}
+
+/** 오늘이면 시각만, 아니면 날짜까지 */
+function formatTime(ms: number): string {
+  const d = new Date(ms)
+  const today = new Date()
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
+
+  const time = d.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+  if (sameDay) return time
+  return `${d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })} ${time}`
 }
 
 /** 접힌 턴에 보여줄 한 줄. 목업 머리말은 떼고 본문 첫 줄만. */

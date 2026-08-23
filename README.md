@@ -281,7 +281,6 @@ mock 모드에서는 후속 질문의 파이프라인이 짧아진다 (`Refiner`
 ```
 VITE_API_URL=/backend
 VITE_BACKEND_ORIGIN=https://xxxx.ngrok-free.app
-VITE_SQUAD_ID=77c7ba94-fa87-4b2b-b7cc-f7b01540cd8a
 ```
 
 비워두면 프롬프트에서 시나리오를 생성해 재생한다 (백엔드 불필요).
@@ -289,7 +288,7 @@ VITE_SQUAD_ID=77c7ba94-fa87-4b2b-b7cc-f7b01540cd8a
 ### 엔드포인트
 
 ```
-POST /api/ask                   { topic, squad_id }  ->  { discussionId }
+POST /api/ask                   { topic }  ->  { discussionId }
 GET  /api/discussion/{id}       { discussionInfo, conclusion, transcript }
 ```
 
@@ -338,26 +337,18 @@ discussionId가 있으니 `resume()`이 다시 불러온다. 다른 턴으로 �
 
 ### 배포
 
-Vercel(`vercel.json`)과 Netlify(`netlify.toml`) 설정이 둘 다 들어 있다.
-어느 쪽이든 **같은 구성**이다 — 빌드는 `npm run build` → `dist`,
-`/backend/*` 를 백엔드로 프록시.
+`vercel.json`이 빌드(`npm run build` → `dist`)와 `/backend/*` 프록시를 함께 담고 있다.
 
 ```bash
-# Vercel
 npx vercel --prod
-
-# Netlify
-npx netlify-cli login
-npx netlify-cli deploy --prod
 ```
 
-`VITE_` 변수는 빌드 결과물에 그대로 박히는 공개 값이라 `netlify.toml`에 적어 뒀다
-(Netlify는 대시보드 설정이 필요 없다). Vercel은 프로젝트 환경변수로 넣어야 한다 —
-`VITE_` 접두사 때문에 Production에서는 `--visibility config --no-sensitive` 가 필요하다.
+`VITE_API_URL=/backend` 는 프로젝트 환경변수로 넣는다. `VITE_` 접두사가 붙은 값은
+빌드 결과물에 그대로 박히는 공개 값이라, Vercel이 Production에서 비밀 변수로 못 쓰게 막는다 —
+`--visibility config --no-sensitive` 가 필요하다.
 
-**ngrok 주소가 바뀌면 `vercel.json`과 `netlify.toml` 두 곳을 함께 고쳐야 한다.**
-백엔드가 CORS를 열면 이 프록시가 통째로 필요 없어지고, `VITE_API_URL`에 절대 주소를
-넣는 것으로 끝난다.
+**ngrok 주소가 바뀌면 `vercel.json`을 고쳐 커밋해야 한다.** 백엔드가 CORS를 열면
+이 프록시가 통째로 필요 없어지고 `VITE_API_URL`에 절대 주소를 넣는 것으로 끝난다.
 
 ### CORS — 백엔드에 필요한 것
 

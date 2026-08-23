@@ -486,3 +486,66 @@
   font-size: 9px;
   letter-spacing: 0.1em;
 }
+
+/* ---------- 검색 ---------- */
+
+.result__search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result__search input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.result__search input:focus {
+  border-color: color-mix(in srgb, var(--running) 55%, transparent);
+}
+
+.result__search input::placeholder {
+  color: #5c5c6b;
+}
+
+.result__hits {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+}
+
+.result__hits button {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--muted);
+  font: inherit;
+  font-size: 10px;
+  cursor: pointer;
+}
+
+.result__hits button:hover {
+  color: var(--text);
+}
+
+/* 질문한 시각 */
+.turn__time {
+  flex: none;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 10px;
+  white-space: nowrap;
+}

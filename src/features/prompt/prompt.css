@@ -195,22 +195,5 @@
   line-height: 1.5;
 }
 
-.prompt__shorten {
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--error) 45%, transparent);
-  background: var(--panel-2);
-  color: var(--text);
-  font: inherit;
-  font-size: 11px;
-  cursor: pointer;
-}
 
-.prompt__shorten:hover:not(:disabled) {
-  border-color: var(--error);
-}
 
-.prompt__shorten:disabled {
-  color: var(--muted);
-  cursor: not-allowed;
-}

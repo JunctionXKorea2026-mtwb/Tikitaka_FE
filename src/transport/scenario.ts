@@ -82,7 +82,27 @@ export function buildScenario(runId: string, prompt: string, followUp = false): 
     buildResearch(events, at, topic, query, prompt, words)
   }
 
-  return { runId, title, events }
+  /*
+   * 루트 에이전트 id를 runId로 바꾼다.
+   *
+   * 'orchestrator' 로 두면 모든 턴의 루트가 같은 id가 되어,
+   * 원자 하나를 고를 때 전부 선택 표시된다 (실제 백엔드도 같은 이유로 discussionId를 쓴다).
+   * 시나리오는 'orchestrator' 로 짜는 편이 읽기 쉬우므로 마지막에 한 번 갈아끼운다.
+   */
+  return { runId, title, events: events.map((e) => rename(e, 'orchestrator', runId)) }
+}
+
+/** 이벤트 안의 에이전트 id 하나를 갈아끼운다 (agentId / parentId / from / to) */
+function rename(event: AgentEvent, from: string, to: string): AgentEvent {
+  const swap = (id?: string) => (id === from ? to : id)
+  switch (event.type) {
+    case 'agent.started':
+      return { ...event, agentId: swap(event.agentId)!, parentId: swap(event.parentId) }
+    case 'message.sent':
+      return { ...event, from: swap(event.from)!, to: swap(event.to)! }
+    default:
+      return { ...event, agentId: swap(event.agentId)! }
+  }
 }
 
 type Clock = (dt: number) => number
