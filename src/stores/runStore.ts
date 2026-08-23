@@ -32,6 +32,8 @@ export interface Turn {
   prompt: string
   title: string
   events: AgentEvent[]
+  /** 질문을 보낸 시각 (epoch ms) */
+  createdAt: number
   conn: ConnState
   error?: string
   /** LLM이 줄인 한 줄 제목. 원자 라벨과 목록에 쓴다. */
@@ -64,8 +66,6 @@ interface RunStore {
   summarize: (id: string) => void
   /** 캔버스를 다른 턴으로 옮긴다 */
   selectTurn: (id: string) => void
-  /** 활성 턴을 처음부터 다시 재생 */
-  replay: () => void
   /** 대화를 비우고 새로 시작 */
   reset: () => void
   disconnect: () => void
@@ -106,6 +106,7 @@ export const useRunStore = create<RunStore>()(
             id: runId,
             parentId,
             prompt: trimmed,
+            createdAt: Date.now(),
             title: '',
             events: [],
             conn: 'connecting',
@@ -181,19 +182,6 @@ export const useRunStore = create<RunStore>()(
         driver.start(handlersFor(set, turn.id, (id) => get().summarize(id)))
       },
 
-      replay() {
-        const turn = activeTurn(get())
-        if (!turn) return
-
-        driver?.stop()
-        set((s) => ({
-          turns: s.turns.map((t) => (t.id === turn.id ? { ...t, events: [], conn: 'connecting' } : t)),
-          cursor: null,
-        }))
-
-        driver = createDriver(turn.id, get().speed)
-        driver.start(handlersFor(set, turn.id, (id) => get().summarize(id)))
-      },
 
       reset() {
         driver?.stop()
@@ -219,14 +207,23 @@ export const useRunStore = create<RunStore>()(
        * 늘리면 옛 저장본에는 그 필드가 없다. 화면에는 조용히 빈 값으로 나온다
        * (발언 전문이 안 보이던 게 이 경우였다).
        * 그래서 이벤트만 비우고 대화는 남긴다 — discussionId가 있으니 다시 불러오면 된다.
+       *
+       * v2: 루트 에이전트 id를 고정 문자열('discussion')에서 실제 실행 id로 바꿨다.
+       *     옛 이벤트에는 옛 id가 박혀 있어 목록↔원자 선택이 어긋난다.
+       *     질문 시각(createdAt)도 이때 들어왔다.
        */
-      version: 1,
+      version: 2,
       migrate: (state, from) => {
         const s = state as { turns?: Turn[] }
-        if (from >= 1 || !s.turns) return state
+        if (from >= 2 || !s.turns) return state
         return {
           ...s,
-          turns: s.turns.map((t) => ({ ...t, events: [], conn: 'idle' as ConnState })),
+          turns: s.turns.map((t) => ({
+            ...t,
+            events: [],
+            conn: 'idle' as ConnState,
+            createdAt: t.createdAt ?? 0,
+          })),
         }
       },
       // 함수와 일시적인 상태는 빼고, 대화만 저장한다.
@@ -247,7 +244,7 @@ const MAX_STORED_TURNS = 30
 
 const isSettledConn = (conn: ConnState) => conn === 'done' || conn === 'error'
 
-/** 드라이버 콜백. submit·replay·resume이 같은 걸 쓴다. */
+/** 드라이버 콜백. submit과 resume이 같은 걸 쓴다. */
 function handlersFor(set: SetFn, runId: string, onSettled?: (id: string) => void) {
   return {
     onOpen: (meta: { runId: string; title: string }) =>

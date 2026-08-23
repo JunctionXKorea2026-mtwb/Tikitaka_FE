@@ -11,7 +11,6 @@ import { activeTurn, useRunStore } from '../../stores/runStore'
 export function Toolbar() {
   const turn = useRunStore(activeTurn)
   const turnCount = useRunStore((s) => s.turns.length)
-  const replay = useRunStore((s) => s.replay)
   const [open, setOpen] = useState(true)
 
   return (
@@ -46,13 +45,6 @@ export function Toolbar() {
         </div>
       </div>
 
-      {open && (
-        <div className="toolbar__actions">
-          <button onClick={replay} disabled={!turn}>
-            다시 재생
-          </button>
-        </div>
-      )}
     </header>
   )
 }
