@@ -31,6 +31,13 @@ interface ViewStore {
   atomPositions: Record<string, [number, number, number]>
   /** 다음 질문이 이어서인지 새 주제인지. 3D가 대상 원자를 표시하는 데도 쓴다. */
   composeMode: 'follow' | 'new'
+  /**
+   * 랜딩을 지나왔는지.
+   *
+   * 저장하지 않는다 — 새로 들어오면 첫 화면을 다시 보는 게 자연스럽다.
+   * 대신 이미 대화가 있으면 App이 랜딩을 건너뛴다.
+   */
+  started: boolean
 
   select: (id: string | null, intent?: PanelTab) => void
   setTab: (tab: PanelTab) => void
@@ -40,6 +47,7 @@ interface ViewStore {
   setAtomPosition: (id: string, pos: [number, number, number]) => void
   resetAtomPositions: () => void
   setComposeMode: (mode: 'follow' | 'new') => void
+  start: () => void
   setResultExpanded: (expanded: boolean) => void
   setPosition: (id: string, pos: XYPosition) => void
   resetPositions: () => void
@@ -62,6 +70,7 @@ export const useViewStore = create<ViewStore>()(
       panelWidth: 400,
       atomPositions: {},
       composeMode: 'follow',
+      started: false,
 
       /**
        * 노드를 고르는 행위 자체가 "상세를 보겠다"는 뜻이다.
@@ -84,6 +93,7 @@ export const useViewStore = create<ViewStore>()(
         set((s) => ({ atomPositions: { ...s.atomPositions, [id]: pos } })),
       resetAtomPositions: () => set({ atomPositions: {} }),
       setComposeMode: (composeMode) => set({ composeMode }),
+      start: () => set({ started: true }),
       setResultExpanded: (resultExpanded) => set({ resultExpanded }),
       setPosition: (id, pos) => set((s) => ({ positions: { ...s.positions, [id]: pos } })),
       resetPositions: () => set({ positions: {} }),
