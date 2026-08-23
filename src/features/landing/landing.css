@@ -24,7 +24,10 @@
   display: block;
 }
 
-/* 글자가 앉는 자리를 살짝 어둡게 해 대비를 만든다 */
+/*
+ * 글자가 앉는 자리를 살짝 어둡게 해 대비를 만든다.
+ * START를 누르면 글자가 먼저 빠진다 — 원자가 퍼지는 동안 시야를 비워 준다.
+ */
 .landing__center {
   position: absolute;
   inset: 0;
@@ -35,26 +38,22 @@
   gap: 14px;
   text-align: center;
   padding: 24px;
-  background: radial-gradient(ellipse 44% 40% at 50% 50%, rgba(3, 5, 13, 0.82), transparent 72%);
+  background: radial-gradient(ellipse 46% 42% at 50% 50%, rgba(3, 5, 13, 0.78), transparent 74%);
+  transition: opacity 0.34s ease, transform 0.34s ease;
 }
 
-.landing__mark {
-  display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 15px;
-  background: linear-gradient(135deg, #3f9dff, #7b74ff);
-  color: #fff;
-  font-size: 20px;
-  box-shadow: 0 0 40px rgba(63, 157, 255, 0.45);
+.landing.is-exiting .landing__center {
+  opacity: 0;
+  transform: scale(1.08);
+  pointer-events: none;
 }
+
 
 .landing h1 {
-  margin: 8px 0 0;
-  font-size: 34px;
+  margin: 0;
+  font-size: 40px;
   font-weight: 680;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.015em;
   color: #eaf2ff;
   text-shadow: 0 0 40px rgba(63, 157, 255, 0.45);
 }
@@ -92,11 +91,10 @@
   transform: translateY(1px);
 }
 
-.landing__hint {
-  margin-top: 4px;
-  color: #5f7699;
-  font-size: 11px;
+.landing__start:disabled {
+  cursor: default;
 }
+
 
 @media (prefers-reduced-motion: reduce) {
   .landing {
