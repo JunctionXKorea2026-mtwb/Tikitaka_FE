@@ -1,0 +1,105 @@
+.landing {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  overflow: hidden;
+  background: #03050d;
+  animation: landing-in 0.4s ease-out;
+}
+
+@keyframes landing-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* 3D 배경은 뒤에 깔리고 조작은 받지 않는다 */
+.landing__scene {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.landing__scene canvas {
+  display: block;
+}
+
+/* 글자가 앉는 자리를 살짝 어둡게 해 대비를 만든다 */
+.landing__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  text-align: center;
+  padding: 24px;
+  background: radial-gradient(ellipse 44% 40% at 50% 50%, rgba(3, 5, 13, 0.82), transparent 72%);
+}
+
+.landing__mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: linear-gradient(135deg, #3f9dff, #7b74ff);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: 0 0 40px rgba(63, 157, 255, 0.45);
+}
+
+.landing h1 {
+  margin: 8px 0 0;
+  font-size: 34px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  color: #eaf2ff;
+  text-shadow: 0 0 40px rgba(63, 157, 255, 0.45);
+}
+
+.landing p {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: #93a9c9;
+}
+
+.landing__start {
+  margin-top: 18px;
+  padding: 13px 46px;
+  border-radius: 999px;
+  border: 1px solid rgba(120, 180, 255, 0.55);
+  background: rgba(10, 20, 40, 0.6);
+  color: #dceaff;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.22em;
+  cursor: pointer;
+  transition: border-color 0.18s, box-shadow 0.18s, color 0.18s;
+  box-shadow: 0 0 26px rgba(63, 157, 255, 0.18);
+}
+
+.landing__start:hover {
+  border-color: #6fb6ff;
+  color: #fff;
+  box-shadow: 0 0 44px rgba(63, 157, 255, 0.42);
+}
+
+.landing__start:active {
+  transform: translateY(1px);
+}
+
+.landing__hint {
+  margin-top: 4px;
+  color: #5f7699;
+  font-size: 11px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing {
+    animation: none;
+  }
+}
