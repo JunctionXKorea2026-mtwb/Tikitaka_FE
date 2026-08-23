@@ -2,7 +2,12 @@ import type { AgentEvent } from '../entities/event'
 
 export interface DriverHandlers {
   /** 실행 메타데이터가 확정됐을 때 (스트림 시작 직후 1회) */
-  onOpen: (meta: { runId: string; title: string }) => void
+  onOpen: (meta: {
+    runId: string
+    title: string
+    /** 백엔드가 아는 시작 시각 (epoch ms). 클라이언트 시계보다 이쪽이 정확하다. */
+    createdAt?: number
+  }) => void
   onEvent: (event: AgentEvent) => void
   onDone: () => void
   onError: (error: Error) => void

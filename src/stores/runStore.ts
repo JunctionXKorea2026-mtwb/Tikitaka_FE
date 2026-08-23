@@ -247,8 +247,14 @@ const isSettledConn = (conn: ConnState) => conn === 'done' || conn === 'error'
 /** 드라이버 콜백. submit과 resume이 같은 걸 쓴다. */
 function handlersFor(set: SetFn, runId: string, onSettled?: (id: string) => void) {
   return {
-    onOpen: (meta: { runId: string; title: string }) =>
-      patch(set, runId, { title: meta.title, conn: 'streaming' as ConnState }),
+    onOpen: (meta: { runId: string; title: string; createdAt?: number }) =>
+      patch(set, runId, {
+        title: meta.title,
+        conn: 'streaming' as ConnState,
+        // 백엔드가 아는 시각이 있으면 그걸 쓴다.
+        // 클라이언트 시계보다 정확하고, 저장본을 다시 불러온 옛 턴도 이때 채워진다.
+        ...(meta.createdAt ? { createdAt: meta.createdAt } : {}),
+      }),
     onEvent: (event: AgentEvent) =>
       set((s) => ({
         turns: s.turns.map((t) => (t.id === runId ? { ...t, events: [...t.events, event] } : t)),
