@@ -7,6 +7,8 @@
 주고받은 발언이 에너지선으로 흐른다. 후속 질문을 하면 원자가 하나 더 생겨 결합하므로
 **대화 전체가 하나의 분자**가 된다.
 
+![Tikitaka 실행 화면](docs/demo.gif)
+
 ```
 https://tikitaka-fe.vercel.app
 ```
